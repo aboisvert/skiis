@@ -4,6 +4,7 @@ import java.util.concurrent._
 import java.util.concurrent.atomic._
 import java.util.concurrent.locks._
 
+import scala.annotation.tailrec
 import scala.annotation.unchecked.uncheckedVariance
 import scala.collection.mutable.ArrayBuffer
 
@@ -24,6 +25,20 @@ trait Skiis[+T] extends { self =>
 
   /** Return the next element of this collection. */
   def next(): Option[T]
+  
+  def take(n: Int): Seq[T] = {
+    val buf = new ArrayBuffer[T](n)
+    var i = 0
+    while (i < n) {
+      val n = next()
+      if (n.isEmpty) {
+        return buf
+      }
+      buf += n.get
+      i += 1
+    }
+    buf
+  } 
 
   /** Transform elements of this collection using `f` and return a new collection. */
   def map[U](f: T => U): Skiis[U] = new Skiis[U]() {
@@ -34,19 +49,22 @@ trait Skiis[+T] extends { self =>
    *  outputs per input element and return a new collection concatenating the outputs.
    */
   def flatMap[U](f: T => Skiis[U]): Skiis[U] = new Skiis[U]() {
-    val queue = new ArrayBuffer[U]()
+    private val queue = new ArrayBuffer[U]()
 
     override def next(): Option[U] = synchronized {
-      if (queue.size > 0) {
-        return Some(queue.remove(0))
+      @tailrec def next0(): Option[U] = {
+        if (queue.size > 0) {
+          return Some(queue.remove(0))
+        }
+        val next = Skiis.this.next()
+        if (next == null || next.isEmpty) {
+          None
+        } else {
+          queue ++= f(next.get).toIterator
+          next0()
+        }
       }
-      val next = Skiis.this.next()
-      if (next == null || next.isEmpty) {
-        None
-      } else {
-        queue ++= f(next.get).toIterator
-        this.next()
-      }
+      next0()
     }
   }
 
@@ -326,25 +344,10 @@ trait Skiis[+T] extends { self =>
     protected def startWorkers() {
       lock.lock()
       try {
-        while (true) {
+        while (!noMore && needMoreWorkers) {
           bailOutIfNecessary()
-
-          if (!needMoreWorkers) return
-
           workersOutstanding += 1
-
-          lock.unlock()
-          val next = self.next()
-          lock.lock()
-
-          if (next.isDefined) {
-            context.executor.submit(new Worker(next.get))
-          } else {
-            workerCompleted()
-            noMore = true
-            notifyPossiblyNoMore()
-            return
-          }
+          context.executor.submit(new Worker(context.batch))
         }
       } catch {
         case e: Throwable => reportException(e)
@@ -413,12 +416,24 @@ trait Skiis[+T] extends { self =>
       }
     }
 
-    private class Worker(input: T) extends Runnable {
+    private class Worker(val batch: Int) extends Runnable {
       def run: Unit = {
         try {
           bailOutIfNecessary()
-          process(input)
-          startWorkers()
+          val next = Skiis.this.take(batch)
+          if (next.size < batch) {
+            lock.lock()
+            try {
+              noMore = true
+              notifyPossiblyNoMore()
+            } finally {
+              lock.unlock()
+            }
+          }
+          val iter = next.iterator
+          while (iter.hasNext) {
+            process(iter.next)
+          }
         } catch {
           case ex: Throwable => job.reportException(ex)
         } finally {
@@ -429,7 +444,7 @@ trait Skiis[+T] extends { self =>
   }
 
   trait Queue[U] extends Skiis[U] { self: Job[U] =>
-    private val results = new ArrayBlockingQueue[Option[U]](context.queue)
+    private val results = new LinkedBlockingQueue[Option[U]](context.queue)
 
     private val available = new Condition(lock)
 
@@ -448,7 +463,7 @@ trait Skiis[+T] extends { self =>
     override final def notifyPossiblyNoMore() = available.signalAll()
 
     override protected def needMoreWorkers = {
-      (workersOutstanding <= context.parallelism && results.size + context.parallelism < context.queue)
+      (workersOutstanding <= context.parallelism && results.size + (workersOutstanding * context.batch) < context.queue)
     }
 
     override def next: Option[U] = next(-1L, TimeUnit.MILLISECONDS)
@@ -463,13 +478,10 @@ trait Skiis[+T] extends { self =>
       } else {
         Long.MaxValue
       }
-      while (true) {
-        bailOutIfNecessary()
-
-        lock.lock()
-        try {
-          if (workersOutstanding <= 0 && noMore && results.size == 0) { return None }
-
+     lock.lock()
+     try {
+        while (workersOutstanding > 0 || !noMore || results.size > 0) {
+          bailOutIfNecessary()
           val next = results.poll()
           if (next != null) {
             startWorkers()
@@ -477,11 +489,11 @@ trait Skiis[+T] extends { self =>
           }
           startWorkers()
           available.await(deadline - System.currentTimeMillis)
-        } finally {
-          lock.unlock()
         }
+      } finally {
+        lock.unlock()
       }
-      sys.error("Unreachable")
+      return None
     }
   }
 
@@ -538,6 +550,7 @@ object Skiis {
     override def next = iter.synchronized {
       if (iter.hasNext) Some(iter.next) else None
     }
+    override def take(n: Int) = iter.synchronized { super.take(n) }
   }
 
   def apply[T](s: Iterable[T]): Skiis[T] = apply(s.iterator)
@@ -555,9 +568,10 @@ object Skiis {
     val executor: ExecutorService
     val parallelism: Int
     val queue: Int
+    val batch: Int
 
     override def toString = {
-      "%s(executor=%s, parallelism=%s, queue=%s)" format (getclass.getSimpleName, executor, parallelism, queue)
+      "%s(executor=%s, parallelism=%s, queue=%s)" format (getClass.getSimpleName, executor, parallelism, queue)
     }
   }
 
@@ -565,5 +579,6 @@ object Skiis {
     override lazy val executor = Executors.newFixedThreadPool(parallelism)
     override lazy val parallelism = Runtime.getRuntime.availableProcessors + 1
     override lazy val queue = 100
+    override lazy val batch = 10
   }
 }

@@ -24,6 +24,11 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       mapped.toIterator.toSeq should be === Seq(1, 2, 2, 3, 3, 4, 4, 5)
     }
 
+    "flatMap nothing" in {
+      val mapped = Skiis(1 to 4) flatMap { i => Skiis(Seq.empty) }
+      mapped.toIterator.toSeq should be === Seq()
+    }
+    
     "filter" in {
       val filtered = Skiis(1 to 10) filter (_ % 2 == 0)
       filtered.toIterator.toSeq should be === Seq(2, 4, 6, 8, 10)
@@ -68,6 +73,11 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       mapped.toIterator.sum should be === 300000
       acc.get should be === 100000
     }
+
+    "parFlatMap nothing" in {
+      val mapped = Skiis(1 to 10000) flatMap { i => Skiis(Seq.empty) }
+      mapped.toIterator.toSeq should be === Seq()
+    }
     
     "parFilter" in {
       val filtered = Skiis(1 to 100000) parFilter { _ % 10 == 0 }
@@ -96,6 +106,7 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
         val executor = Executors.newFixedThreadPool(5)
         val parallelism = 5
         val queue = 10
+        val batch = 1
       }
       val lock = new Object
       var max = 0

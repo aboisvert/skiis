@@ -40,10 +40,12 @@ See CHANGELOG for evolution details.
 
 ### Performance ###
 
-Skiis[T] are most likely slower than Scala Parallel Collections -- Skiis has
-been designed with coarsed grained operations in mind.
+Skiis' performance is comparable to Scala Parallel Collections -- sometimes
+better, sometimes worse. It depends on your workload (types of operations),
+the thread pool you use, the allowable queue depth and worker batch size, and so
+on.
 
-NO CLAIM OF PERFORMANCE COMPARED TO STANDARD SCALA PARALLEL COLLECTIONS IS MADE.
+I have no yet tested Skiis on machines with > 16 CPU cores.
 
 ### Examples ###
 
@@ -51,6 +53,8 @@ Launch your Scala REPL,
 
     # launch Scala REPL
     buildr shell
+
+and you can then interactively try the Skiis[T] collections,
 
     Welcome to Scala version 2.9.1.final (Java HotSpot(TM) 64-Bit Server VM, Java 1.7.0_04).
     Type in expressions to have them evaluated.
@@ -99,8 +103,18 @@ Launch your Scala REPL,
     res1: Int = 1410165408
     (Elapsed 27ms)
 
+    // configure a different context
 
-    def time[T](f: => T) = {
+    scala> implicit val context = new Skiis.Context {
+      val executor = Executors.newFixedThreadPool(5)
+      val parallelism = 10
+      val queue = 10000
+      val batch = 100
+    }
+
+    // timing function (handy for interactive testing)
+
+    scala> def time[T](f: => T) = {
       val start = System.currentTimeMillis
       val result = f
       val stop = System.currentTimeMillis
@@ -114,7 +128,6 @@ You need Apache Buildr 1.4.x or higher.
 
     # compile, test and package .jars
     buildr package
-
 
 ### Target platform ###
 
