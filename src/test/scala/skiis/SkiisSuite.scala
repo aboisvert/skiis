@@ -1,0 +1,195 @@
+package skiis
+
+import java.util.concurrent.Executors
+
+import org.scalatest.WordSpec
+import org.scalatest.matchers.ShouldMatchers
+
+import scala.collection._
+
+@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
+class SkiisSuite extends WordSpec with ShouldMatchers {
+  import Skiis._
+
+  "Skiis" should {
+    implicit val context = Skiis.DefaultContext
+
+    "map" in {
+      val mapped = Skiis(1 to 10) map (_ * 2)
+      mapped.toIterator.toSeq should be === Seq(2, 4, 6, 8, 10, 12, 14, 16, 18, 20)
+    }
+
+    "flatMap" in {
+      val mapped = Skiis(1 to 4) flatMap { i => Skiis(Seq(i, i+1)) }
+      mapped.toIterator.toSeq should be === Seq(1, 2, 2, 3, 3, 4, 4, 5)
+    }
+
+    "filter" in {
+      val filtered = Skiis(1 to 10) filter (_ % 2 == 0)
+      filtered.toIterator.toSeq should be === Seq(2, 4, 6, 8, 10)
+    }
+
+    "filterNot" in {
+      val filtered = Skiis(1 to 10) filterNot (_ % 2 == 0)
+      filtered.toIterator.toSeq should be === Seq(1, 3, 5, 7, 9)
+    }
+
+    "collect" in {
+      val collected = Skiis(1 to 10) collect { case i if i % 2 == 0 => i+1 }
+      collected.toIterator.toList should be === Seq(3, 5, 7, 9, 11)
+    }
+
+    "foreach" in {
+      val acc = new java.util.concurrent.atomic.AtomicInteger()
+      Skiis(Seq.fill(100)(1)) foreach { i => acc.incrementAndGet() }
+      acc.get should be === 100
+    }
+
+    "for comprehension" in {
+      val result = for (i <- Skiis(1 to 5); j <- Skiis(2 to 4) if i > j) yield (i, j)
+      // val result = Skiis(1 to 10) flatMap { i => Skiis(1 to 2) map { j => (i, j) } }
+      result.toIterator.toList should be === Seq((3,2), (4,2), (4,3), (5,2), (5,3), (5,4))
+    }
+
+    "parMap" in {
+      val mapped = Skiis(1 to 10) parMap (_ * 2)
+      mapped.toIterator.toSet should be === Set(2, 4, 6, 8, 10, 12, 14, 16, 18, 20)
+    }
+    
+    "parForeach" in {
+      val acc = new java.util.concurrent.atomic.AtomicInteger()
+      Skiis(Seq.fill(100000)(1)) parForeach { i => acc.incrementAndGet() }
+      acc.get should be === 100000
+    }
+
+    "parFlatMap" in {
+      val acc = new java.util.concurrent.atomic.AtomicInteger()
+      val mapped = Skiis(Seq.fill(100000)(1)) parFlatMap { i => acc.incrementAndGet(); List(i, i+1) }
+      mapped.toIterator.sum should be === 300000
+      acc.get should be === 100000
+    }
+    
+    "parFilter" in {
+      val filtered = Skiis(1 to 100000) parFilter { _ % 10 == 0 }
+      val result = filtered.toIterator.toSet
+      result.size should be === 100000/10
+      result should be === (10 to 100000 by 10).toSet
+    }
+    
+    "parFilterNot" in {
+      val filtered = Skiis(1 to 100000) parFilterNot { _ % 10 != 0 }
+      filtered.toIterator.toSet should be === (10 to 100000 by 10).toSet
+    }
+    
+    "parCollect" in {
+      val collected = Skiis(1 to 100000) parCollect { case i if i % 10 == 0 => i+1 }
+      collected.toIterator.toSet should be === (11 to 100001 by 10).toSet
+    }
+
+    "combine parMap and parReduce" in {
+      val result = Skiis(Seq.fill(10)(1)) parMap (_ * 2) parReduce (_ + _)
+      result should be === 20
+    }
+    
+    "combine parMap and parReduce with fixed thread pool of 5 threads" in {
+      implicit val context = new Skiis.Context {
+        val executor = Executors.newFixedThreadPool(5)
+        val parallelism = 5
+        val queue = 10
+      }
+      val lock = new Object
+      var max = 0
+      var count = 0
+
+      val mapped = Skiis(Seq.fill(10)(1)) parMap { i: Int =>
+        //println("map: %d" format i)
+        
+        Thread.sleep(50)
+        lock.synchronized {
+          count += 1
+        }
+        Thread.sleep(50)
+
+        lock.synchronized {
+          max = if (count > max) count else max
+        }
+
+        Thread.sleep(100)
+        lock.synchronized {
+          count -= 1
+        }
+        i
+      }
+      
+      // mapped.toIterator.toList should be === Seq(1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
+      val reduce = mapped parReduce { (i: Int, j: Int) => 
+        // println("reduce: %d + %d" format (i, j))
+        i + j 
+      }
+      reduce should be === 10
+      count should be === 0
+      max should be === 5
+    }
+
+    /*
+    "reduce as mapped values become available" in {
+
+      val pool1 = Executors.newFixedThreadPool(1)
+      val lock = new Object
+      val array = mutable.ArrayBuffer[Int]()
+      var sum = 0
+
+      val p = new Parallel(pool1, 10)
+      val mapped = p.map(1 to 10 toSkiis) { (i: Int) =>
+        lock.synchronized {
+          array += i
+        }
+        i
+      }
+      val reduce = p.reduce(mapped) { (i: Int, j: Int) =>
+        lock.synchronized {
+          Console println("i="+i+" j="+j)
+
+          if (array.size == 2) {
+            i should be === array(0)
+            j should be === array(1)
+            sum = (i + j)
+          } else {
+            i should be === sum
+            j should be === array(array.size-1)
+            sum += j
+          }
+        }
+        i + j
+      }
+      reduce should be === (1 to 10).reduceLeft(_ + _)
+      array.size should be === 10
+    }
+    */
+
+    "work with Iterator" in {
+      Skiis(Iterator(1,2,3)) parReduce ((_: Int) + (_: Int)) should be === 6
+    }
+    
+    "work with large number of elements" in {
+      val mapped = Skiis(Seq.fill(100000)(1)) map { _ * 2}
+      val reduced = mapped parReduce { _ + _ }
+      // mapped.toIterator.toList
+      reduced should be === 200000
+    }
+
+    /*
+    "parFold" in {
+      val acc = new java.util.concurrent.atomic.AtomicInteger()
+      val total = Skiis(Seq.fill(100000)(1)).parFold(0L) { (i, total) =>
+        // println("i %d total %d" format (i, total))
+        acc.incrementAndGet(); 
+        i + total 
+      }
+      acc.get should be === 100000
+      total should be === 100000
+    }
+    */
+    
+  }
+}
