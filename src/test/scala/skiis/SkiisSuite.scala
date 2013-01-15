@@ -28,7 +28,7 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       val mapped = Skiis(1 to 4) flatMap { i => Skiis(Seq.empty) }
       mapped.toIterator.toSeq should be === Seq()
     }
-    
+
     "filter" in {
       val filtered = Skiis(1 to 10) filter (_ % 2 == 0)
       filtered.toIterator.toSeq should be === Seq(2, 4, 6, 8, 10)
@@ -60,7 +60,7 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       val mapped = Skiis(1 to 10) parMap (_ * 2)
       mapped.toIterator.toSet should be === Set(2, 4, 6, 8, 10, 12, 14, 16, 18, 20)
     }
-    
+
     "parForeach" in {
       val acc = new java.util.concurrent.atomic.AtomicInteger()
       Skiis(Seq.fill(100000)(1)) parForeach { i => acc.incrementAndGet() }
@@ -78,19 +78,19 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       val mapped = Skiis(1 to 10000) flatMap { i => Skiis(Seq.empty) }
       mapped.toIterator.toSeq should be === Seq()
     }
-    
+
     "parFilter" in {
       val filtered = Skiis(1 to 100000) parFilter { _ % 10 == 0 }
       val result = filtered.toIterator.toSet
       result.size should be === 100000/10
       result should be === (10 to 100000 by 10).toSet
     }
-    
+
     "parFilterNot" in {
       val filtered = Skiis(1 to 100000) parFilterNot { _ % 10 != 0 }
       filtered.toIterator.toSet should be === (10 to 100000 by 10).toSet
     }
-    
+
     "parCollect" in {
       val collected = Skiis(1 to 100000) parCollect { case i if i % 10 == 0 => i+1 }
       collected.toIterator.toSet should be === (11 to 100001 by 10).toSet
@@ -100,7 +100,7 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       val result = Skiis(Seq.fill(10)(1)) parMap (_ * 2) parReduce (_ + _)
       result should be === 20
     }
-    
+
     "combine parMap and parReduce with fixed thread pool of 5 threads" in {
       implicit val context = new Skiis.Context {
         val executor = Executors.newFixedThreadPool(5)
@@ -114,7 +114,7 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
 
       val mapped = Skiis(Seq.fill(10)(1)) parMap { i: Int =>
         //println("map: %d" format i)
-        
+
         Thread.sleep(50)
         lock.synchronized {
           count += 1
@@ -131,11 +131,11 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
         }
         i
       }
-      
+
       // mapped.toIterator.toList should be === Seq(1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
-      val reduce = mapped parReduce { (i: Int, j: Int) => 
+      val reduce = mapped parReduce { (i: Int, j: Int) =>
         // println("reduce: %d + %d" format (i, j))
-        i + j 
+        i + j
       }
       reduce should be === 10
       count should be === 0
@@ -181,7 +181,7 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
     "work with Iterator" in {
       Skiis(Iterator(1,2,3)) parReduce ((_: Int) + (_: Int)) should be === 6
     }
-    
+
     "work with large number of elements" in {
       val mapped = Skiis(Seq.fill(100000)(1)) map { _ * 2}
       val reduced = mapped parReduce { _ + _ }
@@ -194,13 +194,13 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       val acc = new java.util.concurrent.atomic.AtomicInteger()
       val total = Skiis(Seq.fill(100000)(1)).parFold(0L) { (i, total) =>
         // println("i %d total %d" format (i, total))
-        acc.incrementAndGet(); 
-        i + total 
+        acc.incrementAndGet();
+        i + total
       }
       acc.get should be === 100000
       total should be === 100000
     }
     */
-    
+
   }
 }

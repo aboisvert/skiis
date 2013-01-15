@@ -25,7 +25,7 @@ trait Skiis[+T] extends { self =>
 
   /** Return the next element of this collection. */
   def next(): Option[T]
-  
+
   def take(n: Int): Seq[T] = {
     val buf = new ArrayBuffer[T](n)
     var i = 0
@@ -38,7 +38,7 @@ trait Skiis[+T] extends { self =>
       i += 1
     }
     buf
-  } 
+  }
 
   /** Transform elements of this collection using `f` and return a new collection. */
   def map[U](f: T => U): Skiis[U] = new Skiis[U]() {
