@@ -31,8 +31,8 @@ Skiis address a few deficiencies in the standard Scala collections,
   introduced that feature.
 
 * Beyond pluging-in your own Executor, you can also control the level of
-  parallelism (number of workers submitted to Executor) and queuing (number of
-  work-in-progress elements) of parallel operations to balance memory usage against parallelism.
+  1) parallelism -- number of workers simultaneously submitted to Executor,
+  2) queuing -- number of work-in-progress elements between parallel operations to balance memory usage against parallelism and 3) batch size -- to balance efficiency against sharing executor/thread-pool resources.
 
 * Skiis[T] exposes a Control trait that supports cancellation.
 
@@ -40,12 +40,12 @@ See CHANGELOG for evolution details.
 
 ### Performance ###
 
-Skiis' performance is comparable to Scala Parallel Collections -- sometimes
-better, sometimes worse. It depends on your workload (types of operations),
-the thread pool you use, the allowable queue depth and worker batch size, and so
-on.
+Skiis' performance is generally comparable to Scala Parallel Collections --
+sometimes better, sometimes worse. It depends on your workload (types of
+operations), the thread pool you use, the allowable queue depth and worker batch
+size, and so on.
 
-I have no yet tested Skiis on machines with > 16 CPU cores.
+I have not yet tested Skiis on machines with > 16 CPU cores.
 
 ### Examples ###
 
