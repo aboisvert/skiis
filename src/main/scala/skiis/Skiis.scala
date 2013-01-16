@@ -589,16 +589,16 @@ object Skiis {
   }
 
   object DefaultContext extends Context {
-    override lazy val executor = Executors.newFixedThreadPool(parallelism)
-    override lazy val parallelism = Runtime.getRuntime.availableProcessors + 1
-    override lazy val queue = 100
-    override lazy val batch = 10
+    override final val parallelism = Runtime.getRuntime.availableProcessors + 1
+    override final val queue = 100
+    override final val batch = 10
+    override final lazy val executor = Executors.newFixedThreadPool(parallelism)
   }
 
   object DeterministicContext extends Context {
-    override lazy val parallelism = 1
-    override lazy val queue = 1
-    override lazy val batch = 1
+    override final val parallelism = 1
+    override final val queue = 1
+    override final val batch = 1
     override lazy val executor = Executors.newFixedThreadPool(1)
   }
 
