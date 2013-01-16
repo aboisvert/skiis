@@ -6,43 +6,48 @@ Think "Parallel Skiis"
 Skiis are streaming / iterator-like collections that support both
 "stream fusion" and parallel operations.
 
-Skiis address a few deficiencies in the standard Scala collections,
+Skiis address different needs (and some deficiencies depending on your point of
+view) than the standard Scala {serial, parallel} collections,
 
-* All operations from Skiis[T] => Skiis[U] are non-strict -- processing happens
-  only on as-needed basis.  This applies to both serial (e.g. `map`) and parallel operations (e.g., `parMap`)
+* All operations from `Skiis[T]` => `Skiis[U]` are lazy -- processing
+  happens only on as-needed basis.  This applies to both serial (e.g. `map`) and
+  parallel operations (e.g., `parMap`)
 
 * Serial/parallel processing are explicit by name (e.g., `map` vs `parMap`) --
   no guessing how each operation processes the data.
 
-* Streaming-oriented framework is memory-safe -- won't cause bad suprises
-  since none of the operations will suddenly materialize a huge data collections
-  in memory or lead to "memory retention" as sometimes the case when handling
-  Streams.  Skiis have fewer operations than Scala collections but those
-  offered are amenable to stream-  and/or parallel-processing.
-  (You can easily and explicitly convert Skiis[T] to an Iterator[T] if you want
-  to use Scala collections methods -- caveat emptor!)
+* Streaming-oriented framework is memory-safe -- won't cause bad surprises
+  since none of the operations will suddenly materialize a huge data collection
+  in memory or lead to memory retention as is sometimes the case when handling
+  Streams (i.e., keeping reference to the `head`).  Skiis have fewer operations
+  than Scala collections but those offered are amenable to stream-  and/or
+  parallel-processing.  You can easily and explicitly convert `Skiis[T]` to an
+  `Iterator[T]` if you want to use Scala collections methods -- caveat emptor!
 
-* You can mix lazy (stream-fusion) and parallel processing operations together
-  to tailor the level of parallelism at each stage of your processing pipeline
-  for SEDA-style pull-based streaming architecture.
+* You can mix serial and parallel processing operations together to tailor the
+  level of parallelism at each stage of your processing pipeline for SEDA-style
+  pull-based streaming architecture.
 
-* Pluggable execution context -- you can easily plug your own Executor
-  (thread pool) -- although this only applies to Scala 2.9.x since 2.10.0
-  introduced that feature.
+* Pluggable execution context -- you can easily plug your own `Executor`
+  (thread pool) and/or use a different `Executor` for different parallel operations.  (Note this deficiency only applies to Scala 2.9.x since 2.10.0
+  introduced pluggable contexts).
 
-* Beyond pluging-in your own Executor, you can also control the level of
+* Beyond pluging-in your own `Executor`, you can also control the level of
   1) parallelism -- number of workers simultaneously submitted to Executor,
-  2) queuing -- number of work-in-progress elements between parallel operations to balance memory usage against parallelism and 3) batch size -- to balance efficiency against sharing executor/thread-pool resources.
+  2) queuing -- number of work-in-progress elements between parallel operations
+  to balance memory usage against parallelism and 3) batch size -- to balance
+  efficiency/contention against sharing your executor(s)/thread-pool(s)
+  with other tasks (whether they use `Skiis` or not).
 
-* Skiis[T] exposes a Control trait that supports cancellation.
+* `Skiis[T]` exposes a `Control` trait that supports cancellation.
 
-See CHANGELOG for evolution details.
+See `CHANGELOG` for evolution details.
 
 ### Performance ###
 
 Skiis' performance is generally comparable to Scala Parallel Collections --
 sometimes better, sometimes worse. It depends on your workload (types of
-operations), the thread pool you use, the allowable queue depth and worker batch
+operations), the thread pool you use, the allowable queue depth, worker batch
 size, and so on.
 
 I have not yet tested Skiis on machines with > 16 CPU cores.
