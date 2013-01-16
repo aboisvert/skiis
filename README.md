@@ -122,6 +122,13 @@ and you can then interactively try the Skiis[T] collections,
       result
     }
 
+### Caveats ###
+
+* Skiis do not implement equals() or hashCode().  If you want to compare Skiis,
+  first convert them to an Iterator.   This may be supported in the future.
+
+
+
 ### Building ###
 
 You need Apache Buildr 1.4.x or higher.

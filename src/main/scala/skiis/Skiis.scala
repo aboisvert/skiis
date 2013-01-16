@@ -26,6 +26,7 @@ trait Skiis[+T] extends { self =>
   /** Return the next element of this collection. */
   def next(): Option[T]
 
+  /** Return the next `n` elements of this collection. */
   def take(n: Int): Seq[T] = {
     val buf = new ArrayBuffer[T](n)
     var i = 0
@@ -69,7 +70,10 @@ trait Skiis[+T] extends { self =>
   }
 
   /** Selects all elements of this collection which satisfy a predicate. */
-  def filter(f: T => Boolean): Skiis[T] = new Skiis[T]() {
+  def filter(f: T => Boolean): Skiis[T] = withFilter(f)
+
+  /** Selects all elements of this collection which satisfy a predicate. */
+  def withFilter(f: T => Boolean): Skiis[T] = new Skiis[T]() {
     override def next(): Option[T] = {
       while (true) {
         val next = Skiis.this.next()
@@ -565,13 +569,22 @@ object Skiis {
   }
 
   trait Context {
-    val executor: ExecutorService
+    /** Maximum number of outstandig workers submitted to executor */
     val parallelism: Int
+
+    /** Number of elements to be queued (work-in-progress) until workers temporarily stop processing */
     val queue: Int
+
+    /** Number of elements handled by each worker before worker is re-submitted to executor.
+     *  This is a tradeoff between processing efficiency and sharing the executor with other clients.
+     */
     val batch: Int
 
+    /** Underlying executor service, e.g., FixedThreadPool, ForkJoin, ... */
+    val executor: ExecutorService
+
     override def toString = {
-      "%s(executor=%s, parallelism=%s, queue=%s)" format (getClass.getSimpleName, executor, parallelism, queue)
+      "%s(executor=%s, parallelism=%d, queue=%d, batch=%d)" format (getClass.getSimpleName, executor, parallelism, queue, batch)
     }
   }
 
@@ -581,4 +594,12 @@ object Skiis {
     override lazy val queue = 100
     override lazy val batch = 10
   }
+
+  object DeterministicContext extends Context {
+    override lazy val parallelism = 1
+    override lazy val queue = 1
+    override lazy val batch = 1
+    override lazy val executor = Executors.newFixedThreadPool(1)
+  }
+
 }
