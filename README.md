@@ -101,10 +101,10 @@ and you can then interactively try the Skiis[T] collections,
     res1: Int = 1410165408
     (Elapsed 54ms)
 
-    // compared to Scala non-parallel collections
+    // compared to Scala "serial" collections
     // (all parallel collections have some overhead)
 
-    scala> (1 to 100000).par map (_ * 2) filter (_ % 2 == 0) reduce (_ + _)
+    scala> (1 to 100000) map (_ * 2) filter (_ % 2 == 0) reduce (_ + _)
     res1: Int = 1410165408
     (Elapsed 27ms)
 
