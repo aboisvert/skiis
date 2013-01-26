@@ -569,16 +569,19 @@ object Skiis {
    *  that allows "pushing" elements to consumers.
    */
   final class Queue[T](val size: Int) extends Skiis[T] {
-    private[this] val queue = new LinkedBlockingQueue[Option[T]](size)
+    private[this] val queue = new LinkedBlockingQueue[T](size)
     private[this] var closed = false
     private[this] val lock = new ReentrantLock()
-    private[this] val available = lock.newCondition()
+    private[this] val empty = lock.newCondition()
+    private[this] val full = lock.newCondition()
 
     def +=(t: T) {
       lock.lock()
       try {
-        queue.put(Some(t))
-        available.signal()
+        while (!queue.offer(t)) {
+          full.await()
+        }
+        empty.signal()
       } finally {
         lock.unlock()
       }
@@ -587,8 +590,12 @@ object Skiis {
     def ++=(ts: Seq[T]) {
       lock.lock()
       try {
-        ts foreach +=
-        available.signalAll()
+        for (t <- ts) {
+          while (!queue.offer(t)) {
+            full.await()
+          }
+        }
+        empty.signalAll()
       } finally {
         lock.unlock()
       }
@@ -598,7 +605,7 @@ object Skiis {
       lock.lock()
       try {
         closed = true
-        available.signalAll()
+        empty.signalAll()
       } finally {
         lock.unlock()
       }
@@ -610,9 +617,35 @@ object Skiis {
         while (true) {
           if (closed) return None
           val n = queue.poll()
-          if (n != null) return n
-          available.await()
+          if (n != null) {
+            full.signal()
+            return Some(n)
+          }
+          empty.await()
         }
+        sys.error("unreachable")
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def take(n: Int): Seq[T] = {
+      val result = new ArrayBuffer[T](n)
+      lock.lock()
+      try {
+        while (result.size < n && (queue.size > 0 || !closed)) {
+          val isFull = (queue.size == size)
+          val n = queue.poll()
+          if (n != null) {
+            result += n
+            if (isFull) full.signal()
+          } else {
+            empty.await()
+          }
+        }
+        full.signalAll()
+        return result
+
         sys.error("unreachable")
       } finally {
         lock.unlock()
