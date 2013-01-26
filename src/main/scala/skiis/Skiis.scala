@@ -334,6 +334,18 @@ trait Skiis[+T] extends { self =>
     }
   }
 
+  def ++[TT >: T](other: Skiis[TT]): Skiis[TT] = new Skiis[TT] {
+    private var selfEmpty = false
+    override def next(): Option[TT] = synchronized {
+      if (!selfEmpty) {
+        val n = self.next()
+        if (n.isDefined) return n
+        else selfEmpty = true
+      }
+      other.next()
+    }
+  }
+
   /** Job holds completion status and computation output */
   private[Skiis] abstract class Job[U](implicit val context: Context) extends Control { job =>
     protected val lock = new ReentrantLock()

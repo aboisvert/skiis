@@ -222,5 +222,11 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       val s = Skiis("a", "b", "c")
       s.zipWithIndex.toIterator.toList should be === List(("a", 0), ("b", 1), ("c", 2))
     }
+
+    "concat using ++" in {
+      val s1 = Skiis("a", "b", "c")
+      val s2 = Skiis("d", "e")
+      (s1 ++ s2).toIterator.toList should be === List("a", "b", "c", "d", "e")
+    }
   }
 }

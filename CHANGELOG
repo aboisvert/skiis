@@ -2,7 +2,7 @@
  * Added: Skiis.Queue[T] collection backed by a LinkedBlockingQueue[T]
           that allows "pushing" elements to consumers.
 
- * Added: Skiis.zipWithIndex
+ * Added: Skiis.zip(), Skiis.zipWithIndex(), Skiis.++()
 
 0.1.0 (2013-01-14)
  * First alpha
