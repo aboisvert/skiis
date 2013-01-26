@@ -169,7 +169,7 @@ trait Skiis[+T] extends { self =>
 
   /** Transform elements of this collection in parallel using `f` and return a new collection. */
   def parMap[U](f: T => U)(implicit context: Context): Skiis[U] = {
-    val job = new Job[U]() with Queue[U] {
+    val job = new Job[U]() with Queuing[U] {
       override def process(t: T) = enqueue(f(t))
     }
     job.start()
@@ -181,7 +181,7 @@ trait Skiis[+T] extends { self =>
    *  concatenating all the outputs.
    */
   def parFlatMap[U](f: T => Seq[U])(implicit context: Context): Skiis[U] = {
-    val job = new Job[U]() with Queue[U] {
+    val job = new Job[U]() with Queuing[U] {
       override def process(t: T) =  enqueue(f(t))
     }
     job.start()
@@ -190,7 +190,7 @@ trait Skiis[+T] extends { self =>
 
   /** Selects (in parallel) all elements of this collection which satisfy a predicate. */
   def parFilter(f: T => Boolean)(implicit context: Context): Skiis[T] = {
-    val job = new Job[T]() with Queue[T] {
+    val job = new Job[T]() with Queuing[T] {
       override def process(t: T) =  { if (f(t)) enqueue(t) }
     }
     job.start()
@@ -199,7 +199,7 @@ trait Skiis[+T] extends { self =>
 
   /** Selects (in parallel) all elements of this collection which do not satisfy a predicate. */
   def parFilterNot(f: T => Boolean)(implicit context: Context): Skiis[T] = {
-    val job = new Job[T]() with Queue[T] {
+    val job = new Job[T]() with Queuing[T] {
       override def process(t: T) =  { if (!f(t)) enqueue(t) }
     }
     job.start()
@@ -208,7 +208,7 @@ trait Skiis[+T] extends { self =>
 
   /** Filter and transform elements of this collection (in parallel) using the partial function `f` */
   def parCollect[U](f: PartialFunction[T, U])(implicit context: Context): Skiis[U] = {
-    val job = new Job[U]() with Queue[U] {
+    val job = new Job[U]() with Queuing[U] {
       override def process(t: T) =  { if (f.isDefinedAt(t)) enqueue(f(t)) }
     }
     job.start()
@@ -447,7 +447,7 @@ trait Skiis[+T] extends { self =>
     }
   }
 
-  trait Queue[U] extends Skiis[U] { self: Job[U] =>
+  trait Queuing[U] extends Skiis[U] { self: Job[U] =>
     private val results = new LinkedBlockingQueue[Option[U]](context.queue)
 
     private val available = new Condition(lock)
@@ -550,6 +550,8 @@ trait Skiis[+T] extends { self =>
 }
 
 object Skiis {
+
+  /** Construct Skiis[T] collection from an Iterator[T] */
   def apply[T](iter: Iterator[T]) = new Skiis[T] {
     override def next = iter.synchronized {
       if (iter.hasNext) Some(iter.next) else None
@@ -557,10 +559,66 @@ object Skiis {
     override def take(n: Int) = iter.synchronized { super.take(n) }
   }
 
+  /** Construct Skiis[T] collection from an Iterable[T] */
   def apply[T](s: Iterable[T]): Skiis[T] = apply(s.iterator)
 
   /** Convenience construction for literal values */
   def apply[T](t: T, ts: T*): Skiis[T] = apply(Iterator(t) ++ ts.toIterator)
+
+  /** A Skiis[T] collection backed by a LinkedBlockingQueue[T]
+   *  that allows "pushing" elements to consumers.
+   */
+  final class Queue[T](val size: Int) extends Skiis[T] {
+    private[this] val queue = new LinkedBlockingQueue[Option[T]](size)
+    private[this] var closed = false
+    private[this] val lock = new ReentrantLock()
+    private[this] val available = lock.newCondition()
+
+    def +=(t: T) {
+      lock.lock()
+      try {
+        queue.put(Some(t))
+        available.signal()
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    def ++=(ts: Seq[T]) {
+      lock.lock()
+      try {
+        ts foreach +=
+        available.signalAll()
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    def close() {
+      lock.lock()
+      try {
+        closed = true
+        available.signalAll()
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def next: Option[T] = {
+      lock.lock()
+      try {
+        while (true) {
+          if (closed) return None
+          val n = queue.poll()
+          if (n != null) return n
+          available.await()
+        }
+        sys.error("unreachable")
+      } finally {
+        lock.unlock()
+      }
+    }
+  }
 
   trait Control {
     def cancel(): Unit
