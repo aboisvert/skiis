@@ -314,6 +314,26 @@ trait Skiis[+T] extends { self =>
     job.result
   }
 
+  def zipWithIndex: Skiis[(T, Long)] = {
+    val counter = new AtomicLong()
+    this map { t => (t, counter.getAndIncrement) }
+  }
+
+  def zip[U](other: Skiis[U]): Skiis[(T, U)] = new Skiis[(T, U)] {
+    private var done = false
+    override def next(): Option[(T, U)] = synchronized {
+      if (done) return None
+
+      val n1 = self.next()
+      val n2 = other.next()
+      if (n1.isDefined && n2.isDefined) Some((n1.get, n2.get))
+      else {
+        done = true
+        None
+      }
+    }
+  }
+
   /** Job holds completion status and computation output */
   private[Skiis] abstract class Job[U](implicit val context: Context) extends Control { job =>
     protected val lock = new ReentrantLock()

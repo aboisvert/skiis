@@ -202,5 +202,25 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
     }
     */
 
+    "zip" in {
+      locally {
+        // left side termination
+        val s1 = Skiis(1 to 3)
+        val s2 = Skiis(1 to 4)
+        (s1 zip s2).toIterator.toList should be === List((1,1), (2,2), (3, 3))
+      }
+
+      locally {
+        // right side termination
+        val s1 = Skiis(1 to 4)
+        val s2 = Skiis(1 to 3)
+        (s1 zip s2).toIterator.toList should be === List((1,1), (2,2), (3, 3))
+      }
+    }
+
+    "zipWithIndex" in {
+      val s = Skiis("a", "b", "c")
+      s.zipWithIndex.toIterator.toList should be === List(("a", 0), ("b", 1), ("c", 2))
+    }
   }
 }

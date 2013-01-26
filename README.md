@@ -133,6 +133,9 @@ and you can then interactively try the Skiis[T] collections,
   first convert them to an Iterator.   This may be supported in the future.
 
 
+### TODOs ###
+
+* Add `++` concatenating method
 
 ### Building ###
 
