@@ -42,30 +42,47 @@ trait Skiis[+T] extends { self =>
   }
 
   /** Transform elements of this collection using `f` and return a new collection. */
-  def map[U](f: T => U): Skiis[U] = new Skiis[U]() {
-    override def next() = Skiis.this.next() map f
+  def map[U](f: T => U): Skiis[U] = {
+    val captureF = f
+    self match {
+      case map: MapOp[T] @unchecked =>
+        self.asInstanceOf[MapOp[U]].f = map.f andThen captureF // fusion
+        self.asInstanceOf[Skiis[U]]
+
+      case map: FlatMapOp[T] @unchecked =>
+        val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
+        val enqueue = (x: Any, push: U => Unit) => previous(x, (t: T) => push(captureF(t))) // possibly fusion
+        self.asInstanceOf[FlatMapOp[U]].enqueue = enqueue // fusion
+        self.asInstanceOf[Skiis[U]]
+
+      case _ =>
+        new Skiis[U] with MapOp[U] {
+          @volatile override var f: _ => U = captureF
+          override def next() = self.next() map f.asInstanceOf[T => U]
+        }
+    }
   }
+
+  def watch[U](f: T => Unit): Skiis[T] = map { x => f(x); x }
 
   /** Transform elements of this collection with the function `f` producing zero-or-more
    *  outputs per input element and return a new collection concatenating the outputs.
    */
-  def flatMap[U](f: T => Skiis[U]): Skiis[U] = new Skiis[U]() {
-    private val queue = new ArrayBuffer[U]()
+  def flatMap[U](f: T => Skiis[U]): Skiis[U] = {
+    val capturedF = f
 
-    override def next(): Option[U] = synchronized {
-      @tailrec def next0(): Option[U] = {
-        if (queue.size > 0) {
-          return Some(queue.remove(0))
+    self match {
+      case map: FlatMapOp[T] @unchecked =>
+        val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
+        val enqueue = (x: Any, push: U => Unit) => previous(x, capturedF(_) foreach push) // possibly fusion
+        self.asInstanceOf[FlatMapOp[U]].enqueue = enqueue // fusion
+        self.asInstanceOf[Skiis[U]]
+
+      case _ =>
+        new Skiis[U] with FlatMapOp[U] {
+          @volatile override var enqueue = (x: Any, push: U => Unit) => capturedF(x.asInstanceOf[T]) foreach push
+          override val previous: Skiis[T] = self
         }
-        val next = Skiis.this.next()
-        if (next == null || next.isEmpty) {
-          None
-        } else {
-          queue ++= f(next.get).toIterator
-          next0()
-        }
-      }
-      next0()
     }
   }
 
@@ -73,52 +90,62 @@ trait Skiis[+T] extends { self =>
   def filter(f: T => Boolean): Skiis[T] = withFilter(f)
 
   /** Selects all elements of this collection which satisfy a predicate. */
-  def withFilter(f: T => Boolean): Skiis[T] = new Skiis[T]() {
-    override def next(): Option[T] = {
-      while (true) {
-        val next = Skiis.this.next()
-        if (next.isEmpty || f(next.get)) {
-          return next
+  def withFilter(f: T => Boolean): Skiis[T] = {
+    self match {
+      case map: FlatMapOp[T] @unchecked =>
+        val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
+        val enqueue = (x: Any, push: T => Unit) => previous(x, t => if (f(t)) push(t)) // possibly fusion
+        self.asInstanceOf[FlatMapOp[T]].enqueue = enqueue // fusion
+        self.asInstanceOf[Skiis[T]]
+
+      case _ =>
+        new Skiis[T]() {
+          override def next(): Option[T] = {
+            while (true) {
+              val next = self.next()
+              if (next.isEmpty || f(next.get)) {
+                return next
+              }
+            }
+            sys.error("unreachable")
+          }
         }
-      }
-      sys.error("unreachable")
     }
   }
 
   /** Selects all elements of this collection which do not satisfy a predicate. */
-  def filterNot(f: T => Boolean): Skiis[T] = new Skiis[T]() {
-    override def next(): Option[T] = {
-      while (true) {
-        val next = Skiis.this.next()
-        if (next.isEmpty || !f(next.get)) {
-          return next
-        }
-      }
-      sys.error("unreachable")
-    }
-  }
+  def filterNot(f: T => Boolean): Skiis[T] = filter(!f(_))
 
   /** Filter and transform elements of this collection using the partial function `f` */
-  def collect[U](f: PartialFunction[T, U]): Skiis[U] = new Skiis[U]() {
-    override def next(): Option[U] = {
-      while (true) {
-        val next = Skiis.this.next()
-        if (next.isEmpty) return None
-        if (f.isDefinedAt(next.get)) {
-          return Some(f(next.get))
+  def collect[U](f: PartialFunction[T, U]): Skiis[U] = {
+    self match {
+      case map: FlatMapOp[T] @unchecked =>
+        val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
+        val enqueue = (x: Any, push: U => Unit) => previous(x, t => if (f.isDefinedAt(t)) push(f(t))) // possibly fusion
+        self.asInstanceOf[FlatMapOp[U]].enqueue = enqueue // fusion
+        self.asInstanceOf[Skiis[U]]
+
+      case _ =>
+        new Skiis[U]() {
+          override def next(): Option[U] = {
+            while (true) {
+              val next = Skiis.this.next()
+              if (next.isEmpty) return None
+              if (f.isDefinedAt(next.get)) {
+                return Some(f(next.get))
+              }
+            }
+            sys.error("unreachable")
+          }
         }
-      }
-      sys.error("unreachable")
     }
   }
 
   /** Applies a function `f` to all elements of this collection */
   def foreach(f: T => Unit) {
     while (true) {
-      val next = Skiis.this.next()
-      if (next.isEmpty) {
-        return
-      }
+      val next = self.next()
+      if (next.isEmpty) return
       f(next.get)
     }
   }
@@ -141,10 +168,16 @@ trait Skiis[+T] extends { self =>
 
   /** Applies a function `f` in parallel to all elements of this collection */
   def parForeach(f: T => Unit)(implicit context: Context) {
+    parForeachAsync(f).result // block for result
+  }
+
+  /** Applies a function `f` in parallel to all elements of this collection */
+  def parForeachAsync(f: T => Unit)(implicit context: Context): Control with Result[Unit] = {
     val job = new Job[Unit]() with Result[Unit] {
       private val completed = new Condition(lock)
       override def process(t: T) = f(t)
       override def notifyExceptionOrCancelled() = completed.signalAll()
+      override def notifyWorkerCompleted() = startWorkers()
       override def notifyAllWorkersDone() = completed.signalAll()
       override def notifyPossiblyNoMore() = completed.signalAll()
       override def result = {
@@ -152,8 +185,6 @@ trait Skiis[+T] extends { self =>
         try {
           while (!isDone) {
             bailOutIfNecessary()
-            //println(last)
-            startWorkers()
             completed.await()
           }
         } finally {
@@ -164,7 +195,7 @@ trait Skiis[+T] extends { self =>
     }
 
     job.start()
-    job.result
+    job
   }
 
   /** Transform elements of this collection in parallel using `f` and return a new collection. */
@@ -246,6 +277,7 @@ trait Skiis[+T] extends { self =>
       }
 
       override def notifyExceptionOrCancelled() = { completed.signalAll(); available.signalAll() }
+      override def notifyWorkerCompleted() = startWorkers()
       override def notifyAllWorkersDone() = completed.signalAll()
       override def notifyPossiblyNoMore() = completed.signalAll()
 
@@ -254,7 +286,6 @@ trait Skiis[+T] extends { self =>
         try {
           while (!isDone) {
             bailOutIfNecessary()
-            startWorkers()
             completed.await()
           }
         } finally {
@@ -292,6 +323,7 @@ trait Skiis[+T] extends { self =>
 
       override def notifyExceptionOrCancelled() = completed.signalAll()
       override def notifyPossiblyNoMore() = completed.signalAll()
+      override def notifyWorkerCompleted() = startWorkers()
       override def notifyAllWorkersDone() = completed.signalAll()
 
       override def result = {
@@ -299,7 +331,6 @@ trait Skiis[+T] extends { self =>
         try {
           while (!isDone) {
             bailOutIfNecessary()
-            startWorkers()
             completed.await()
           }
           bailOutIfNecessary()
@@ -355,12 +386,7 @@ trait Skiis[+T] extends { self =>
     protected var exception: Throwable = _
 
     private[Skiis] def start() {
-      lock.lock()
-      try {
-        startWorkers()
-      } finally {
-        lock.unlock()
-      }
+      startWorkers()
     }
 
     protected def process(input: T @uncheckedVariance): Unit
@@ -396,6 +422,7 @@ trait Skiis[+T] extends { self =>
       lock.lock()
       try {
         workersOutstanding -= 1
+        notifyWorkerCompleted()
         if (workersOutstanding <= 0) {
           notifyAllWorkersDone()
         }
@@ -405,6 +432,7 @@ trait Skiis[+T] extends { self =>
     }
 
     protected def notifyExceptionOrCancelled(): Unit
+    protected def notifyWorkerCompleted(): Unit
     protected def notifyAllWorkersDone(): Unit
     protected def notifyPossiblyNoMore(): Unit
 
@@ -495,6 +523,7 @@ trait Skiis[+T] extends { self =>
     }
 
     override final def notifyExceptionOrCancelled() = available.signalAll()
+    override final def notifyWorkerCompleted() = () // new workers started as-needed in next()
     override final def notifyAllWorkersDone() = available.signalAll()
     override final def notifyPossiblyNoMore() = available.signalAll()
 
@@ -534,7 +563,7 @@ trait Skiis[+T] extends { self =>
   }
 
   private[Skiis] trait Result[U] {
-    /** Block for result */
+    /** Block for result, may throw exception if underlying computation failed. */
     def result: U
   }
 
@@ -582,6 +611,38 @@ trait Skiis[+T] extends { self =>
 }
 
 object Skiis {
+  private[Skiis] val _empty = new Skiis[Nothing] {
+    override def next() = None
+    override def take(n: Int) = Seq.empty
+  }
+
+  private[skiis] trait MapOp[T] extends Skiis[T] {
+    private[skiis] var f: _ => T
+  }
+
+  private[skiis] trait FlatMapOp[U] extends Skiis[U] { self =>
+    private[skiis] val previous: Skiis[Any]
+
+    private[skiis] var enqueue: (Any, U => Unit) => Unit
+
+    private[this] final val queue = new ArrayBuffer[U]()
+
+    override def next(): Option[U] = synchronized {
+      @tailrec def next0(): Option[U] = {
+        if (queue.size > 0) {
+          return Some(queue.remove(0))
+        }
+        val next = previous.next()
+        if (next == null || next.isEmpty) {
+          None
+        } else {
+          enqueue(next.get, queue += _)
+          next0()
+        }
+      }
+      next0()
+    }
+  }
 
   /** Construct Skiis[T] collection from an Iterator[T] */
   def apply[T](iter: Iterator[T]) = new Skiis[T] {
@@ -596,6 +657,20 @@ object Skiis {
 
   /** Convenience construction for literal values */
   def apply[T](t: T, ts: T*): Skiis[T] = apply(Iterator(t) ++ ts.toIterator)
+
+  def singleton[T](t: T): Skiis[T] = Skiis(Iterator(t))
+
+  def empty[T]: Skiis[T] = _empty
+
+  def async[T](name: String)(f: => T): Thread = {
+    val t = new Thread(new Runnable() { override def run() { f } }, name)
+    t.start()
+    t
+  }
+
+  def submit[T](f: => T)(c: Context) = {
+    c.executor.submit(new Runnable() { override def run() { f } })
+  }
 
   /** A Skiis[T] collection backed by a LinkedBlockingQueue[T]
    *  that allows "pushing" elements to consumers.
@@ -643,7 +718,7 @@ object Skiis {
       }
     }
 
-    override def next: Option[T] = {
+    override def next(): Option[T] = {
       lock.lock()
       try {
         while (true) {
