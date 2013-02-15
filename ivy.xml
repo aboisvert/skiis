@@ -1,0 +1,27 @@
+<ivy-module version="1.1">
+
+    <info organisation="skiis" module="skiis_2.9.1"/>
+
+    <configurations>
+      <conf name="default" description="core dependencies needed at compile-time and runtime" />
+      <conf name="buildtime" visibility="private" description="additional dependencies needed only at build-time"/>
+      <conf name="test" visibility="private" description="additional dependencies needed only at test-time"/>
+      <conf name="sources" description="sources"/>
+      <conf name="javadocs" description="javadocs"/>
+    </configurations>
+
+    <publications>
+      <artifact conf="default"/>
+    </publications>
+
+    <dependencies defaultconfmapping="sources->sources();buildtime->provided(),default(),master();default->default(),master(),runtime();%->default;" defaultconf="default,sources">
+      <!-- compile -->
+      <dependency org="scala" name="scala" rev="2.9.1.final" conf="buildtime->compiler"/>
+
+      <!-- test -->
+      <dependency org="junit" name="junit" rev="4.8.2" conf="test"/>
+      <dependency org="scalatest" name="scalatest_2.9.1" rev="2.0.M5" conf="test"/>
+
+    </dependencies>
+
+</ivy-module>
