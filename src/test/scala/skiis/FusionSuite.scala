@@ -55,11 +55,11 @@ class FusionSuite extends WordSpec with ShouldMatchers {
       collected.toIterator.toList should be === Seq(6, 6, 8, 8, 10)
     }
 
-    "fuse and watch with collect" in {
+    "fuse and listen with collect" in {
       val intermediate = new ArrayBuffer[Int]()
       val collected = (Skiis(1 to 4)
         flatMap { i => Skiis(i, i + 1) }
-        watch { i => intermediate += i; () }
+        listen { i => intermediate += i; () }
         collect { case i if (i >= 3) => i * 2 }
       )
       collected.isInstanceOf[Skiis.FlatMapOp[_]] should be === true

@@ -63,7 +63,14 @@ trait Skiis[+T] extends { self =>
     }
   }
 
-  def watch[U](f: T => Unit): Skiis[T] = map { x => f(x); x }
+  def listen[U](f: T => Unit): Skiis[T] = map { x =>
+    try {
+      f(x)
+    } catch {
+      case e: Exception => ()
+    }
+    x
+  }
 
   /** Transform elements of this collection with the function `f` producing zero-or-more
    *  outputs per input element and return a new collection concatenating the outputs.
@@ -164,6 +171,15 @@ trait Skiis[+T] extends { self =>
       current = null
       n.get
     }
+  }
+
+  /** "Pull" all values from the collection, forcing evaluation of previous lazy computation. */
+  def pull(): Unit = {
+    foreach { _ => () }
+  }
+
+  def parPull()(implicit context: Context) {
+    parForeachAsync { _ => () }.result // block for result
   }
 
   /** Applies a function `f` in parallel to all elements of this collection */
