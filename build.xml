@@ -23,6 +23,6 @@
 
   <target name="hudson" depends="reallyclean, tests, dist" />
 
-  <target name="hudson-release" depends="reallyclean, tests, dist, publish.repo" />
+  <target name="release" depends="reallyclean, tests, dist, publish.repo" />
 
 </project>
