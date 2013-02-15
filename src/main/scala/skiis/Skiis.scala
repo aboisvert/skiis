@@ -45,11 +45,11 @@ trait Skiis[+T] extends { self =>
   def map[U](f: T => U): Skiis[U] = {
     val captureF = f
     self match {
-      case map: MapOp[T] @unchecked =>
+      case map: MapOp[T @unchecked]  =>
         self.asInstanceOf[MapOp[U]].f = map.f andThen captureF // fusion
         self.asInstanceOf[Skiis[U]]
 
-      case map: FlatMapOp[T] @unchecked =>
+      case map: FlatMapOp[T @unchecked]  =>
         val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
         val enqueue = (x: Any, push: U => Unit) => previous(x, (t: T) => push(captureF(t))) // possibly fusion
         self.asInstanceOf[FlatMapOp[U]].enqueue = enqueue // fusion
@@ -79,7 +79,7 @@ trait Skiis[+T] extends { self =>
     val capturedF = f
 
     self match {
-      case map: FlatMapOp[T] @unchecked =>
+      case map: FlatMapOp[T @unchecked] =>
         val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
         val enqueue = (x: Any, push: U => Unit) => previous(x, capturedF(_) foreach push) // possibly fusion
         self.asInstanceOf[FlatMapOp[U]].enqueue = enqueue // fusion
@@ -99,7 +99,7 @@ trait Skiis[+T] extends { self =>
   /** Selects all elements of this collection which satisfy a predicate. */
   def withFilter(f: T => Boolean): Skiis[T] = {
     self match {
-      case map: FlatMapOp[T] @unchecked =>
+      case map: FlatMapOp[T @unchecked] =>
         val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
         val enqueue = (x: Any, push: T => Unit) => previous(x, t => if (f(t)) push(t)) // possibly fusion
         self.asInstanceOf[FlatMapOp[T]].enqueue = enqueue // fusion
@@ -126,7 +126,7 @@ trait Skiis[+T] extends { self =>
   /** Filter and transform elements of this collection using the partial function `f` */
   def collect[U](f: PartialFunction[T, U]): Skiis[U] = {
     self match {
-      case map: FlatMapOp[T] @unchecked =>
+      case map: FlatMapOp[T @unchecked] =>
         val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
         val enqueue = (x: Any, push: U => Unit) => previous(x, t => if (f.isDefinedAt(t)) push(f(t))) // possibly fusion
         self.asInstanceOf[FlatMapOp[U]].enqueue = enqueue // fusion
