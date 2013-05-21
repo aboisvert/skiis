@@ -45,11 +45,11 @@ trait Skiis[+T] extends { self =>
   def map[U](f: T => U): Skiis[U] = {
     val captureF = f
     self match {
-      case map: MapOp[T] @unchecked =>
+      case map: MapOp[T @unchecked]  =>
         self.asInstanceOf[MapOp[U]].f = map.f andThen captureF // fusion
         self.asInstanceOf[Skiis[U]]
 
-      case map: FlatMapOp[T] @unchecked =>
+      case map: FlatMapOp[T @unchecked]  =>
         val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
         val enqueue = (x: Any, push: U => Unit) => previous(x, (t: T) => push(captureF(t))) // possibly fusion
         self.asInstanceOf[FlatMapOp[U]].enqueue = enqueue // fusion
@@ -79,7 +79,7 @@ trait Skiis[+T] extends { self =>
     val capturedF = f
 
     self match {
-      case map: FlatMapOp[T] @unchecked =>
+      case map: FlatMapOp[T @unchecked] =>
         val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
         val enqueue = (x: Any, push: U => Unit) => previous(x, capturedF(_) foreach push) // possibly fusion
         self.asInstanceOf[FlatMapOp[U]].enqueue = enqueue // fusion
@@ -99,7 +99,7 @@ trait Skiis[+T] extends { self =>
   /** Selects all elements of this collection which satisfy a predicate. */
   def withFilter(f: T => Boolean): Skiis[T] = {
     self match {
-      case map: FlatMapOp[T] @unchecked =>
+      case map: FlatMapOp[T @unchecked] =>
         val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
         val enqueue = (x: Any, push: T => Unit) => previous(x, t => if (f(t)) push(t)) // possibly fusion
         self.asInstanceOf[FlatMapOp[T]].enqueue = enqueue // fusion
@@ -126,7 +126,7 @@ trait Skiis[+T] extends { self =>
   /** Filter and transform elements of this collection using the partial function `f` */
   def collect[U](f: PartialFunction[T, U]): Skiis[U] = {
     self match {
-      case map: FlatMapOp[T] @unchecked =>
+      case map: FlatMapOp[T @unchecked] =>
         val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
         val enqueue = (x: Any, push: U => Unit) => previous(x, t => if (f.isDefinedAt(t)) push(f(t))) // possibly fusion
         self.asInstanceOf[FlatMapOp[U]].enqueue = enqueue // fusion
@@ -627,6 +627,18 @@ trait Skiis[+T] extends { self =>
 }
 
 object Skiis {
+
+  /** ThreadFactory that creates named daemon threads */
+  private [skiis] def daemonThreadFactory(name: String) = new ThreadFactory {
+    private[this] val threadCount = new AtomicLong()
+    override def newThread(r: Runnable) = {
+      val thread = new Thread(r)
+      thread.setName(name + "-" + threadCount.incrementAndGet())
+      thread.setDaemon(true)
+      thread
+    }
+  }
+
   private[Skiis] val _empty = new Skiis[Nothing] {
     override def next() = None
     override def take(n: Int) = Seq.empty
@@ -680,6 +692,7 @@ object Skiis {
 
   def async[T](name: String)(f: => T): Thread = {
     val t = new Thread(new Runnable() { override def run() { f } }, name)
+    t.setDaemon(true)
     t.start()
     t
   }
@@ -806,14 +819,14 @@ object Skiis {
     override final val parallelism = Runtime.getRuntime.availableProcessors + 1
     override final val queue = 100
     override final val batch = 10
-    override final lazy val executor = Executors.newFixedThreadPool(parallelism)
+    override final lazy val executor = Executors.newFixedThreadPool(parallelism, daemonThreadFactory(getClass.getName))
   }
 
   object DeterministicContext extends Context {
     override final val parallelism = 1
     override final val queue = 1
     override final val batch = 1
-    override lazy val executor = Executors.newFixedThreadPool(1)
+    override final lazy val executor = Executors.newFixedThreadPool(1, daemonThreadFactory(getClass.getName))
   }
 
 }
