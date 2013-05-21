@@ -627,6 +627,18 @@ trait Skiis[+T] extends { self =>
 }
 
 object Skiis {
+
+  /** ThreadFactory that creates named daemon threads */
+  private [skiis] def daemonThreadFactory(name: String) = new ThreadFactory {
+    private[this] val threadCount = new AtomicLong()
+    override def newThread(r: Runnable) = {
+      val thread = new Thread(r)
+      thread.setName(name + "-" + threadCount.incrementAndGet())
+      thread.setDaemon(true)
+      thread
+    }
+  }
+
   private[Skiis] val _empty = new Skiis[Nothing] {
     override def next() = None
     override def take(n: Int) = Seq.empty
@@ -680,6 +692,7 @@ object Skiis {
 
   def async[T](name: String)(f: => T): Thread = {
     val t = new Thread(new Runnable() { override def run() { f } }, name)
+    t.setDaemon(true)
     t.start()
     t
   }
@@ -806,14 +819,14 @@ object Skiis {
     override final val parallelism = Runtime.getRuntime.availableProcessors + 1
     override final val queue = 100
     override final val batch = 10
-    override final lazy val executor = Executors.newFixedThreadPool(parallelism)
+    override final lazy val executor = Executors.newFixedThreadPool(parallelism, daemonThreadFactory(getClass.getName))
   }
 
   object DeterministicContext extends Context {
     override final val parallelism = 1
     override final val queue = 1
     override final val batch = 1
-    override lazy val executor = Executors.newFixedThreadPool(1)
+    override final lazy val executor = Executors.newFixedThreadPool(1, daemonThreadFactory(getClass.getName))
   }
 
 }
