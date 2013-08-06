@@ -7,6 +7,7 @@ import org.scalatest.matchers.ShouldMatchers
 
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
+import scala.language.{ postfixOps, reflectiveCalls }
 
 @org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
 class QueueSuite extends WordSpec with ShouldMatchers {
