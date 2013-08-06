@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<project name="skiis_2.9.1" default="jar">
+<project name="skiis_2.10" default="jar">
 
   <!-- you may override default properties for the build by using entries
        in a build.properties file, or by just adding 'property' elements
