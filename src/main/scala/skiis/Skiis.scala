@@ -41,6 +41,16 @@ trait Skiis[+T] extends { self =>
     buf
   }
 
+  /** Return elements while `f` predicate is satisfied. */
+  def takeWhile(f: T => Boolean): Skiis[T] = new Skiis[T] {
+    def next(): Option[T] = {
+      val n = self.next()
+      if (n.isEmpty) n
+      else if (f(n.get)) n
+      else None
+    }
+  }
+
   /** Transform elements of this collection using `f` and return a new collection. */
   def map[U](f: T => U): Skiis[U] = {
     val captureF = f
