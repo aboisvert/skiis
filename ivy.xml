@@ -1,6 +1,6 @@
 <ivy-module version="1.1">
 
-    <info organisation="skiis" module="skiis_2.9"/>
+    <info organisation="skiis" module="skiis_2.9.1"/>
 
     <configurations>
       <conf name="default" description="core dependencies needed at compile-time and runtime" />
