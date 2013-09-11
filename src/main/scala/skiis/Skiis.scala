@@ -43,11 +43,13 @@ trait Skiis[+T] extends { self =>
 
   /** Return elements while `f` predicate is satisfied. */
   def takeWhile(f: T => Boolean): Skiis[T] = new Skiis[T] {
-    def next(): Option[T] = {
+    private var done = false
+    def next(): Option[T] = synchronized {
+      if (done) return None
       val n = self.next()
-      if (n.isEmpty) n
-      else if (f(n.get)) n
-      else None
+      if (n.isEmpty) { done = true; return None }
+      else if (f(n.get)) return n
+      else { done = true; return None }
     }
   }
 
