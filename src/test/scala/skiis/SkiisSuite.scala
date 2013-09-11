@@ -63,7 +63,7 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
 
     "take" in {
       (Skiis(1 to 10) take 0)  should be === Seq()
-      (Skiis(1 to 10) take 0)  should be === Seq(1)
+      (Skiis(1 to 10) take 1)  should be === Seq(1)
       (Skiis(1 to 10) take 4)  should be === Seq(1,2,3,4)
       (Skiis(1 to 10) take 10) should be === Seq(1,2,3,4,5,6,7,8,9,10)
       (Skiis(1 to 10) take 11) should be === Seq(1,2,3,4,5,6,7,8,9,10)
@@ -74,7 +74,7 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       Skiis(1 to 10).takeWhile(_ <= 1).toIterator.toSeq  should be === Seq(1)
       Skiis(1 to 10).takeWhile(_ <  4).toIterator.toSeq  should be === Seq(1,2,3)
       Skiis(1 to 10).takeWhile(_ <= 10).toIterator.toSeq should be === Seq(1,2,3,4,5,6,7,8,9,10)
-      Skiis(1 to 10).takeWhile(_ <= 11).toIterator.toSeq should be === Seq(1,2,3,4,5,76,7,8,9,10)
+      Skiis(1 to 10).takeWhile(_ <= 11).toIterator.toSeq should be === Seq(1,2,3,4,5,6,7,8,9,10)
     }
 
     "parForeach" in {
