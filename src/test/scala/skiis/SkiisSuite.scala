@@ -244,5 +244,9 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       val s2 = Skiis("d", "e")
       (s1 ++ s2).toIterator.toList should be === List("a", "b", "c", "d", "e")
     }
+
+    "merge/interleave several Skiis" in {
+       Skiis.merge(Skiis(1,2,3), Skiis(4,5), Skiis(6,7,8,9)).toIterator.toList should be === List(1,4,6,2,5,7,3,8,9)
+    }
   }
 }
