@@ -393,6 +393,10 @@ trait Skiis[+T] extends { self =>
     }
   }
 
+  /** Concatenate elements from another Skiis[T].
+   *
+   *  e.g., Skiis(1,2,3) ++ Skiis(4,5) => Skiis(1,2,3,4,5)
+   */
   def ++[TT >: T](other: Skiis[TT]): Skiis[TT] = new Skiis[TT] {
     private var selfEmpty = false
     override def next(): Option[TT] = synchronized {
@@ -595,6 +599,31 @@ trait Skiis[+T] extends { self =>
     def result: U
   }
 
+  /** A concurrent + mutable ring to continuously iterate through a set of elements.
+   *
+   *  The ring only supports removal and will return `null` when the ring becomes empty.
+   */
+  private[Skiis] class ConcurrentRing[T: ClassManifest](ts: Seq[T]) {
+    private[this] val ref = new AtomicReference(ts.toArray)
+    private[this] val index = new AtomicInteger()
+
+    /** Get next element in ring order (subject to concurrency non-determinism)
+     *  or `null` if the ring is empty.
+     */
+    def next(): T = {
+      val array = ref.get
+      if (array.length == 0) return null.asInstanceOf[T]
+      val i = math.abs(index.getAndIncrement % array.length)
+      array(i)
+    }
+
+    /** Remove element `t` from the ring */
+    def remove(t: T) = synchronized {
+      val newArray = ref.get filterNot (_ == t)
+      ref.set(newArray)
+    }
+  }
+
   /** A condition that implicitly locks/unlocks the underlying reentrant lock. */
   private[Skiis] class Condition(val lock: Lock = new ReentrantLock) {
     private val condition = lock.newCondition()
@@ -701,6 +730,32 @@ object Skiis {
   def singleton[T](t: T): Skiis[T] = Skiis(Iterator(t))
 
   def empty[T]: Skiis[T] = _empty
+
+  /** Merge / interleave several Skiis[T].
+   *
+   *  e.g. Skiis.merge(Skiis(1,2,3), Skiis(4,5), Skiis(6,7,8,9)) =>
+   *           Skiis(1,4,6,2,5,7,3,8,9)
+   *
+   *  Element order in the resulting Skiis[T] is non-deterministic under
+   *  concurrency but implementation attempts to pull elements from each
+   *  underlying Skiis[T] fairly.
+   */
+  def merge[T](skiis: Skiis[T]*): Skiis[T] = new Skiis[T] {
+    private[this] val ring = new ConcurrentRing(skiis)
+
+    @tailrec override def next(): Option[T] = {
+      val skii = ring.next()
+      if (skii == null) return None
+
+      val n = skii.next()
+      if (n.isDefined) {
+        n
+      } else {
+        ring.remove(skii)
+        next()
+      }
+    }
+  }
 
   def async[T](name: String)(f: => T): Thread = {
     val t = new Thread(new Runnable() { override def run() { f } }, name)
