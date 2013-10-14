@@ -4,7 +4,7 @@
 
     <configurations>
       <conf name="default" description="core dependencies needed at compile-time and runtime" />
-      <conf name="buildtime" visibility="private" description="additional dependencies needed only at build-time"/>
+      <conf name="compile" visibility="private" description="additional dependencies needed only at build-time"/>
       <conf name="test" visibility="private" description="additional dependencies needed only at test-time"/>
       <conf name="sources" description="sources"/>
       <conf name="javadocs" description="javadocs"/>
@@ -17,11 +17,12 @@
 
     <dependencies defaultconfmapping="sources->sources();buildtime->provided(),default(),master();default->default(),master(),runtime();%->default;" defaultconf="default,sources">
       <!-- compile -->
-      <dependency org="scala" name="scala" rev="2.9.2" conf="buildtime->compiler"/>
+      <dependency org="org.scala-lang" name="scala-compiler" rev="2.9.1" />
+        <dependency org="org.scala-lang" name="scala-library" rev="2.9.1" />
 
       <!-- test -->
       <dependency org="junit" name="junit" rev="4.8.2" conf="test"/>
-      <dependency org="scalatest" name="scalatest_2.9.2" rev="1.9.1" conf="test"/>
+      <dependency org="org.scalatest" name="scalatest_2.9.2" rev="2.0.M4" conf="test"/>
       <exclude org="scala" module="scala" conf="eclipse" />
 
     </dependencies>
