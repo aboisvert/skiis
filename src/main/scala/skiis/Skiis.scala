@@ -618,10 +618,10 @@ trait Skiis[+T] extends { self =>
     }
 
     /** Remove element `t` from the ring */
-    def remove(t: T) = synchronized {
+    def remove(t: T): Unit = synchronized {
       val oldArray = ref.get
       val i = oldArray.indexOf(t)
-      if (i == -1) throw new IllegalArgumentException("Element '" + t + "' not found in ring")
+      if (i == -1) return
       val newArray = new Array[T](oldArray.length - 1)
       System.arraycopy(oldArray, 0, newArray, 0, i)
       if (newArray.length > i) {
