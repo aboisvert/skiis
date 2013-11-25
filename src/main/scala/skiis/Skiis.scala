@@ -618,8 +618,15 @@ trait Skiis[+T] extends { self =>
     }
 
     /** Remove element `t` from the ring */
-    def remove(t: T) = synchronized {
-      val newArray = ref.get filterNot (_ == t)
+    def remove(t: T): Unit = synchronized {
+      val oldArray = ref.get
+      val i = oldArray.indexOf(t)
+      if (i == -1) return
+      val newArray = new Array[T](oldArray.length - 1)
+      System.arraycopy(oldArray, 0, newArray, 0, i)
+      if (newArray.length > i) {
+        System.arraycopy(oldArray, i + 1, newArray, i, newArray.length - i)
+      }
       ref.set(newArray)
     }
   }
@@ -696,16 +703,20 @@ object Skiis {
 
     private[this] final val queue = new ArrayBuffer[U]()
 
-    override def next(): Option[U] = synchronized {
+    override def next(): Option[U] = {
       @tailrec def next0(): Option[U] = {
-        if (queue.size > 0) {
-          return Some(queue.remove(0))
+        synchronized {
+          if (queue.size > 0) {
+            return Some(queue.remove(0))
+          }
         }
         val next = previous.next()
         if (next == null || next.isEmpty) {
           None
         } else {
-          enqueue(next.get, queue += _)
+          synchronized {
+            enqueue(next.get, queue += _)
+          }
           next0()
         }
       }
