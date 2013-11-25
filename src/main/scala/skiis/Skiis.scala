@@ -714,9 +714,7 @@ object Skiis {
         if (next == null || next.isEmpty) {
           None
         } else {
-          synchronized {
-            enqueue(next.get, queue += _)
-          }
+          enqueue(next.get, x => synchronized { queue += x })
           next0()
         }
       }
