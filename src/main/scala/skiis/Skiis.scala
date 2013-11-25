@@ -703,16 +703,20 @@ object Skiis {
 
     private[this] final val queue = new ArrayBuffer[U]()
 
-    override def next(): Option[U] = synchronized {
+    override def next(): Option[U] = {
       @tailrec def next0(): Option[U] = {
-        if (queue.size > 0) {
-          return Some(queue.remove(0))
+        synchronized {
+          if (queue.size > 0) {
+            return Some(queue.remove(0))
+          }
         }
         val next = previous.next()
         if (next == null || next.isEmpty) {
           None
         } else {
-          enqueue(next.get, queue += _)
+          synchronized {
+            enqueue(next.get, queue += _)
+          }
           next0()
         }
       }
