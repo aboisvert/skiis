@@ -4,3 +4,6 @@ target/
 tools/
 lib/
 build.properties
+reports
+.cache
+*.error
