@@ -703,22 +703,44 @@ object Skiis {
 
     private[this] final val queue = new ArrayBuffer[U]()
 
+    private[this] val lock = new ReentrantLock()
+    private[this] var consumers = 0
+    private[this] val consuming = new Condition(lock)
+    private[this] var noMore = false
+
     override def next(): Option[U] = {
-      @tailrec def next0(): Option[U] = {
-        synchronized {
-          if (queue.size > 0) {
-            return Some(queue.remove(0))
-          }
-        }
+      while (true) {
+        lock.lock()
+        try {
+          if (queue.size > 0) return Some(queue.remove(0))
+          if (noMore && consumers == 0) return None
+          consumers += 1
+        } finally lock.unlock()
+
         val next = previous.next()
         if (next == null || next.isEmpty) {
-          None
+          lock.lock()
+          try {
+            consumers -= 1
+            noMore = true
+            consuming.signalAll()
+            if (consumers == 0) None
+            else consuming.await()
+          } finally lock.unlock()
         } else {
-          enqueue(next.get, x => synchronized { queue += x })
-          next0()
+          enqueue(next.get, { x =>
+            lock.lock()
+            try { queue += x }
+            finally lock.unlock()
+          })
+          lock.lock()
+          try {
+            consumers -= 1
+            consuming.signalAll()
+          } finally lock.unlock()
         }
       }
-      next0()
+      sys.error("unreachable")
     }
   }
 
