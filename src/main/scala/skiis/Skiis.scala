@@ -618,8 +618,15 @@ trait Skiis[+T] extends { self =>
     }
 
     /** Remove element `t` from the ring */
-    def remove(t: T) = synchronized {
-      val newArray = ref.get filterNot (_ == t)
+    def remove(t: T): Unit = synchronized {
+      val oldArray = ref.get
+      val i = oldArray.indexOf(t)
+      if (i == -1) return
+      val newArray = new Array[T](oldArray.length - 1)
+      System.arraycopy(oldArray, 0, newArray, 0, i)
+      if (newArray.length > i) {
+        System.arraycopy(oldArray, i + 1, newArray, i, newArray.length - i)
+      }
       ref.set(newArray)
     }
   }
@@ -696,20 +703,44 @@ object Skiis {
 
     private[this] final val queue = new ArrayBuffer[U]()
 
-    override def next(): Option[U] = synchronized {
-      @tailrec def next0(): Option[U] = {
-        if (queue.size > 0) {
-          return Some(queue.remove(0))
-        }
+    private[this] val lock = new ReentrantLock()
+    private[this] var consumers = 0
+    private[this] val consuming = new Condition(lock)
+    private[this] var noMore = false
+
+    override def next(): Option[U] = {
+      while (true) {
+        lock.lock()
+        try {
+          if (queue.size > 0) return Some(queue.remove(0))
+          if (noMore && consumers == 0) return None
+          consumers += 1
+        } finally lock.unlock()
+
         val next = previous.next()
         if (next == null || next.isEmpty) {
-          None
+          lock.lock()
+          try {
+            consumers -= 1
+            noMore = true
+            consuming.signalAll()
+            if (consumers == 0) None
+            else consuming.await()
+          } finally lock.unlock()
         } else {
-          enqueue(next.get, queue += _)
-          next0()
+          enqueue(next.get, { x =>
+            lock.lock()
+            try { queue += x }
+            finally lock.unlock()
+          })
+          lock.lock()
+          try {
+            consumers -= 1
+            consuming.signalAll()
+          } finally lock.unlock()
         }
       }
-      next0()
+      sys.error("unreachable")
     }
   }
 
