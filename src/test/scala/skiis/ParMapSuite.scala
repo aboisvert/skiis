@@ -17,9 +17,9 @@ class ParMapSuite extends WordSpec with ShouldMatchers {
 
 
     for (i <- 1 to 10) {
-      
+
       implicit val context = new Skiis.Context {
-        override lazy val parallelism = r.nextInt(8) + 8 
+        override lazy val parallelism = r.nextInt(8) + 8
         override lazy val queue = r.nextInt(100) + 1
         override lazy val batch = r.nextInt(10) + 1
         override lazy val executor = Executors.newFixedThreadPool(
@@ -27,7 +27,7 @@ class ParMapSuite extends WordSpec with ShouldMatchers {
           daemonThreadFactory("ParMapSuite")
         )
       }
-      
+
       ("parMap %d" format i) in {
         val acc1 = new AtomicInteger()
         val acc2 = new AtomicInteger()
@@ -48,8 +48,8 @@ class ParMapSuite extends WordSpec with ShouldMatchers {
         }
 
         skiis foreach { case (x1, x2, x3) =>
-          x2 should be === (x1 + 1) 
-          x3 should be === (x1) 
+          x2 should be === (x1 + 1)
+          x3 should be === (x1)
           acc3.incrementAndGet()
           acc4.addAndGet(x1)
         }
