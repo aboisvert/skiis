@@ -16,7 +16,7 @@ class FusionSuite extends WordSpec with ShouldMatchers {
 
     "fuse maps" in {
       val mapped = Skiis(1 to 4) map (_ * 2) map (_ * 2)
-      mapped.isInstanceOf[Skiis.MapOp[_]] should be === true
+      mapped.isInstanceOf[Skiis.MapOp[_, _]] should be === true
       mapped.toIterator.toList should be === Seq(4, 8, 12, 16)
     }
 

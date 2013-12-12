@@ -55,22 +55,21 @@ trait Skiis[+T] extends { self =>
 
   /** Transform elements of this collection using `f` and return a new collection. */
   def map[U](f: T => U): Skiis[U] = {
-    val captureF = f
     self match {
-      case map: MapOp[T @unchecked]  =>
-        self.asInstanceOf[MapOp[U]].f = map.f andThen captureF // fusion
-        self.asInstanceOf[Skiis[U]]
+      case map: MapOp[_, T @unchecked] => map compose f
 
-      case map: FlatMapOp[T @unchecked]  =>
-        val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
-        val enqueue = (x: Any, push: U => Unit) => previous(x, (t: T) => push(captureF(t))) // possibly fusion
-        self.asInstanceOf[FlatMapOp[U]].enqueue = enqueue // fusion
-        self.asInstanceOf[Skiis[U]]
+      case flatMap: FlatMapOp[T @unchecked]  =>
+        flatMap compose { previous => new ApplyContinuation[T, U] {
+          override def apply(x: T, continuation: U => Unit) {
+            previous(x, (x: T) => continuation(f(x))) // possibly fusion
+          }
+        }}
 
       case _ =>
-        new Skiis[U] with MapOp[U] {
-          @volatile override var f: _ => U = captureF
-          override def next() = self.next() map f.asInstanceOf[T => U]
+        val capturedF = f
+        new MapOp[T, U] {
+          override var previous = self
+          override var f = capturedF
         }
     }
   }
@@ -88,18 +87,21 @@ trait Skiis[+T] extends { self =>
    *  outputs per input element and return a new collection concatenating the outputs.
    */
   def flatMap[U](f: T => Skiis[U]): Skiis[U] = {
-    val capturedF = f
-
     self match {
-      case map: FlatMapOp[T @unchecked] =>
-        val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
-        val enqueue = (x: Any, push: U => Unit) => previous(x, capturedF(_) foreach push) // possibly fusion
-        self.asInstanceOf[FlatMapOp[U]].enqueue = enqueue // fusion
-        self.asInstanceOf[Skiis[U]]
+      case flatMap: FlatMapOp[T @unchecked] =>
+        flatMap compose { previous => new ApplyContinuation[T, U] {
+          override def apply(x: T, continuation: U => Unit) {
+            previous(x, f(_) foreach continuation) // possibly fusion
+          }
+        }}
 
       case _ =>
         new Skiis[U] with FlatMapOp[U] {
-          @volatile override var enqueue = (x: Any, push: U => Unit) => capturedF(x.asInstanceOf[T]) foreach push
+          override var applyAndRunContinuation: ApplyContinuation[_, U] = new ApplyContinuation[T, U] {
+            override def apply(x: T, continuation: U => Unit) {
+              f(x) foreach continuation // possibly fusion
+            }
+          }
           override val previous: Skiis[T] = self
         }
     }
@@ -111,11 +113,12 @@ trait Skiis[+T] extends { self =>
   /** Selects all elements of this collection which satisfy a predicate. */
   def withFilter(f: T => Boolean): Skiis[T] = {
     self match {
-      case map: FlatMapOp[T @unchecked] =>
-        val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
-        val enqueue = (x: Any, push: T => Unit) => previous(x, t => if (f(t)) push(t)) // possibly fusion
-        self.asInstanceOf[FlatMapOp[T]].enqueue = enqueue // fusion
-        self.asInstanceOf[Skiis[T]]
+      case flatMap: FlatMapOp[T @unchecked] =>
+        flatMap compose { previous => new ApplyContinuation[T, T] {
+          override def apply(x: T, continuation: T => Unit) {
+            previous(x, x => if (f(x)) continuation(x)) // possibly fusion
+          }
+        }}
 
       case _ =>
         new Skiis[T]() {
@@ -138,11 +141,12 @@ trait Skiis[+T] extends { self =>
   /** Filter and transform elements of this collection using the partial function `f` */
   def collect[U](f: PartialFunction[T, U]): Skiis[U] = {
     self match {
-      case map: FlatMapOp[T @unchecked] =>
-        val previous = map.enqueue.asInstanceOf[(Any, T => Unit) => Unit]
-        val enqueue = (x: Any, push: U => Unit) => previous(x, t => if (f.isDefinedAt(t)) push(f(t))) // possibly fusion
-        self.asInstanceOf[FlatMapOp[U]].enqueue = enqueue // fusion
-        self.asInstanceOf[Skiis[U]]
+      case flatMap: FlatMapOp[T @unchecked] =>
+        flatMap compose { previous => new ApplyContinuation[T, U] {
+          override def apply(x: T, continuation: U => Unit) {
+            previous(x, x => if (f.isDefinedAt(x)) continuation(f(x))) // possibly fusion
+          }
+        }}
 
       case _ =>
         new Skiis[U]() {
@@ -676,6 +680,23 @@ trait Skiis[+T] extends { self =>
 
 object Skiis {
 
+   /** Abstracts over the implementation details of processing elements,
+    *  possibly through a chain of operations, including batching and such.
+    *
+    *  You can think of this as a function T => Seq[U] defined in continuation-passing style.
+    */
+  private[skiis] trait ApplyContinuation[-T, +U] {
+    /** Processes the next element `x` and invokes `continuation` for each resulting element. */
+    def apply(x: T, continuation: U => Unit): Unit
+  }
+
+  /** Convenient to generate universally-quantified continuation types */
+  private[skiis] type Continuation[U] = ApplyContinuation[Any, U]
+
+  /** Coerse existentially-quantified continuations into universally-quantified continuations */
+  @inline
+  private[skiis] def universal[U](x: ApplyContinuation[_, U]) = x.asInstanceOf[Continuation[U]]
+
   /** ThreadFactory that creates named daemon threads */
   private [skiis] def daemonThreadFactory(name: String) = new ThreadFactory {
     private[this] val threadCount = new AtomicLong()
@@ -692,21 +713,71 @@ object Skiis {
     override def take(n: Int) = Seq.empty
   }
 
-  private[skiis] trait MapOp[T] extends Skiis[T] {
-    private[skiis] var f: _ => T
+  private[skiis] trait MapOp[T, U] extends Skiis[U] {
+    /** Previous Skiis collection in the chain; contains elements being consumed
+     *  and to which the `f` operation is being applied.
+     */
+    protected var previous: Skiis[T]
+
+    /** Stream-fusion of all user-defined processing being applied to `previous` elements.
+     *
+     *  This is a `var` because in the case of stream fusion, the function may
+     *  be composed other function(s) and the result substituted for the original
+     *  function.
+     */
+    protected var f: T => U
+
+    /** Sequence function `f2` to this map operation */
+    private[skiis] def compose[V](f2: U => V): MapOp[T, V] = {
+      val updated = this.asInstanceOf[MapOp[T, V]]
+      updated.f = f andThen f2
+      updated
+    }
+
+    override def next() = previous.next() map f
   }
 
   private[skiis] trait FlatMapOp[U] extends Skiis[U] { self =>
-    private[skiis] val previous: Skiis[Any]
+    /** Previous Skiis collection in the chain; contains elements being consumed
+     *  and to which the `enqueue` operation is being applied.
+     */
+    protected val previous: Skiis[_]
 
-    private[skiis] var enqueue: (Any, U => Unit) => Unit
+    /** Stream-fusion of all user-defined processing being applied to `previous` elements.
+     *
+     *  This is a `var` because in the case of stream fusion, the function may
+     *  be composed other function(s) and the result substituted for the original
+     *  function.
+     */
+    protected var applyAndRunContinuation: ApplyContinuation[_, U]
 
+    /**
+     *  An intermediate queue where elements are stored after processing and
+     *  waiting to be consumed by this collection's own public methods.
+     *
+     *  A queue is required because `enqueue` may produce several elements at
+     *  a time (e.g. if the upstream operation is a flatMap).
+     */
     private[this] final val queue = new ArrayBuffer[U]()
 
+    /** Lock for the unsynchronized `queue` */
     private[this] val lock = new ReentrantLock()
+
+    /** Number of outstanding (concurrent) consumers, synchronized by `lock` */
     private[this] var consumers = 0
-    private[this] val consuming = new Condition(lock)
+
+    /** Signaled when a consumer is done consuming.  */
+    private[this] val doneConsuming = new Condition(lock)
+
+    /** Set to `true` when the `previous` collection has no more elements. */
     private[this] var noMore = false
+
+    /** Sequence a new operation to the existing operations */
+    private[skiis] def compose[T2, U2](f: Continuation[U] => ApplyContinuation[T2, U2]) = {
+      val updated = self.asInstanceOf[FlatMapOp[U2]]
+      updated.applyAndRunContinuation = f(universal(applyAndRunContinuation))
+      updated
+    }
 
     override def next(): Option[U] = {
       while (true) {
@@ -723,24 +794,29 @@ object Skiis {
           try {
             consumers -= 1
             noMore = true
-            consuming.signalAll()
-            if (consumers == 0) None
-            else consuming.await()
+            if (consumers == 0) {
+              doneConsuming.signalAll()
+              None
+            } else {
+              doneConsuming.await()
+            }
           } finally lock.unlock()
         } else {
-          enqueue(next.get, { x =>
-            lock.lock()
-            try { queue += x }
-            finally lock.unlock()
-          })
+          universal(applyAndRunContinuation).apply(next.get, enqueue)
           lock.lock()
           try {
             consumers -= 1
-            consuming.signalAll()
+            doneConsuming.signalAll()
           } finally lock.unlock()
         }
       }
       sys.error("unreachable")
+    }
+
+    private[this] final def enqueue(u: U) {
+      lock.lock()
+      try queue += u
+      finally lock.unlock()
     }
   }
 
