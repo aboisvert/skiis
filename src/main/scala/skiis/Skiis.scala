@@ -53,6 +53,14 @@ trait Skiis[+T] extends { self =>
     }
   }
 
+  /** Group stream into groups of `n` elements */
+  def grouped(n: Int): Skiis[Seq[T]] = new Skiis[Seq[T]] {
+    override def next(): Option[Seq[T]] = {
+      val group = self.take(n)
+      if (group.isEmpty) None else Some(group)
+    }
+  }
+
   /** Transform elements of this collection using `f` and return a new collection. */
   def map[U](f: T => U): Skiis[U] = {
     self match {
