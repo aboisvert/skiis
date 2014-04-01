@@ -77,6 +77,13 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       Skiis(1 to 10).takeWhile(_ <= 11).toIterator.toSeq should be === Seq(1,2,3,4,5,6,7,8,9,10)
     }
 
+    "grouped" in {
+      (Skiis(1 to 3) grouped 1).toIterator.toSeq  should be === Seq(Seq(1), Seq(2), Seq(3))
+      (Skiis(1 to 4) grouped 2).toIterator.toSeq  should be === Seq(Seq(1, 2), Seq(3, 4))
+      (Skiis(1 to 5) grouped 2).toIterator.toSeq  should be === Seq(Seq(1, 2), Seq(3, 4), Seq(5))
+      (Skiis(1 to 1000) grouped 7).toIterator.toSeq  should be === (1 to 1000 grouped 7).toSeq
+    }
+
     "parForeach" in {
       val acc = new java.util.concurrent.atomic.AtomicInteger()
       Skiis(Seq.fill(100000)(1)) parForeach { i => acc.incrementAndGet() }
