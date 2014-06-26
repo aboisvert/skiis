@@ -206,6 +206,14 @@ trait Skiis[+T] extends { self =>
     parForeachAsync { _ => () }.result // block for result
   }
 
+  /** Force evaluation of the collection and return all elements in a strict (non-lazy) Seq. */
+  def force(): Seq[T] =  toIterator.to[Vector]
+
+  /** Force evaluation of the collection (in parallel) and return all elements in a strict (non-lazy) Seq. */
+  def parForce()(implicit context: Context): Seq[T] = {
+    parMap(identity).toIterator.to[Vector]
+  }
+
   /** Applies a function `f` in parallel to all elements of this collection */
   def parForeach(f: T => Unit)(implicit context: Context) {
     parForeachAsync(f).result // block for result
@@ -285,59 +293,6 @@ trait Skiis[+T] extends { self =>
     job.start()
     job
   }
-
-  /* ALEX: Commented out due to the serial nature of the operation.
-  def parFold[U](initial: U)(f: (T, U) => U)(implicit context: Context): U = {
-    val job = new Job[U]() with Result[U] {
-      private val acc = new AtomicReference[U](initial)
-
-      private val completed = new Condition(lock)
-      private val available = new Condition(lock)
-
-      override def process(t: T) {
-        var done = false
-        while (!done) {
-          bailOutIfNecessary()
-
-          lock.lock()
-          try {
-            val current = acc.getAndSet(null.asInstanceOf[U])
-            if (current == null) {
-              available.await()
-            } else {
-              val next = try { lock.unlock(); f(t, current) } finally { lock.lock() }
-              acc.set(next)
-              available.signal()
-              done = true
-            }
-          } finally {
-            lock.unlock()
-          }
-        }
-      }
-
-      override def notifyExceptionOrCancelled() = { completed.signalAll(); available.signalAll() }
-      override def notifyWorkerCompleted() = startWorkers()
-      override def notifyAllWorkersDone() = completed.signalAll()
-      override def notifyPossiblyNoMore() = completed.signalAll()
-
-      override def result = {
-        lock.lock()
-        try {
-          while (!isDone) {
-            bailOutIfNecessary()
-            completed.await()
-          }
-        } finally {
-          lock.unlock()
-        }
-        acc.get
-      }
-    }
-    job.start()
-    job.result
-  }
-  */
 
   def parReduce[TT >: T](f: (TT, T) => TT)(implicit context: Context): TT = {
     val job = new Job[T]() with Result[TT] {

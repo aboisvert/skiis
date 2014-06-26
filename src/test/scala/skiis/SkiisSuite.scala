@@ -56,17 +56,16 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       result.toIterator.toList should be === Seq((3,2), (4,2), (4,3), (5,2), (5,3), (5,4))
     }
 
-    "parMap" in {
-      val mapped = Skiis(1 to 10) parMap (_ * 2)
-      mapped.toIterator.toSet should be === Set(2, 4, 6, 8, 10, 12, 14, 16, 18, 20)
-    }
-
     "take" in {
       (Skiis(1 to 10) take 0)  should be === Seq()
       (Skiis(1 to 10) take 1)  should be === Seq(1)
       (Skiis(1 to 10) take 4)  should be === Seq(1,2,3,4)
       (Skiis(1 to 10) take 10) should be === Seq(1,2,3,4,5,6,7,8,9,10)
       (Skiis(1 to 10) take 11) should be === Seq(1,2,3,4,5,6,7,8,9,10)
+    }
+
+    "force" in {
+      Skiis(1 to 10).force()  should be === Seq(1 to 10: _*)
     }
 
     "takeWhile" in {
@@ -88,6 +87,11 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       val acc = new java.util.concurrent.atomic.AtomicInteger()
       Skiis(Seq.fill(100000)(1)) parForeach { i => acc.incrementAndGet() }
       acc.get should be === 100000
+    }
+
+    "parMap" in {
+      val mapped = Skiis(1 to 10) parMap (_ * 2)
+      mapped.toIterator.toSet should be === Set(2, 4, 6, 8, 10, 12, 14, 16, 18, 20)
     }
 
     "parFlatMap" in {
@@ -117,6 +121,11 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
     "parCollect" in {
       val collected = Skiis(1 to 100000) parCollect { case i if i % 10 == 0 => i+1 }
       collected.toIterator.toSet should be === (11 to 100001 by 10).toSet
+    }
+
+    "parForce" in {
+      Skiis(1 to 10).parForce().toSet  should be === Set(1 to 10: _*)
+      Skiis(1 to 10).map (_ + 1 ).parForce().toSet  should be === Set(2 to 11: _*)
     }
 
     "combine parMap and parReduce" in {
