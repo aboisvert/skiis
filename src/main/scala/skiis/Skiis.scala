@@ -660,14 +660,36 @@ object Skiis {
   @inline
   private[skiis] def universal[U](x: ApplyContinuation[_, U]) = x.asInstanceOf[Continuation[U]]
 
-  /** ThreadFactory that creates named daemon threads */
-  private [skiis] def daemonThreadFactory(name: String) = new ThreadFactory {
+  /** Returns a ThreadFactory that creates named + numbered daemon threads */
+  def newDaemonThreadFactory(name: String) = new ThreadFactory {
     private[this] val threadCount = new AtomicLong()
     override def newThread(r: Runnable) = {
       val thread = new Thread(r)
       thread.setName(name + "-" + threadCount.incrementAndGet())
       thread.setDaemon(true)
       thread
+    }
+  }
+
+  /** Creates a new fixed-size thread pool with `threads` daemon threads */
+  def newFixedThreadPool(name: String, threads: Int) = {
+    Executors.newFixedThreadPool(threads, newDaemonThreadFactory(name))
+  }
+
+  /** Creates a Skiis Context with a new fixed-size underlying thread pool of `parallelism` threads,
+   *  with optional `queue` and `batch` configuration (both of which default to `1` unless provided).
+   *
+   *  @see Skiis.Context
+   */
+  def newContext(name: String, parallelism: Int, queue: Int = 1, batch: Int = 1) = {
+    val _parallelism = parallelism
+    val _queue = queue
+    val _batch = batch
+    new Context {
+      override final val parallelism = _parallelism
+      override final val queue = _queue
+      override final val batch = _batch
+      override final lazy val executor = newFixedThreadPool(name, parallelism)
     }
   }
 
@@ -827,6 +849,7 @@ object Skiis {
     }
   }
 
+  /** Runs some computation `f` in a new (daemon) thread and return the thread */
   def async[T](name: String)(f: => T): Thread = {
     val t = new Thread(new Runnable() { override def run() { f } }, name)
     t.setDaemon(true)
@@ -834,7 +857,8 @@ object Skiis {
     t
   }
 
-  def submit[T](f: => T)(c: Context) = {
+  /** Submit some computation `f` into the (implicit/explicit) context's executor. */
+  def submit[T](f: => T)(implicit c: Context) = {
     c.executor.submit(new Runnable() { override def run() { f } })
   }
 
@@ -956,14 +980,14 @@ object Skiis {
     override final val parallelism = Runtime.getRuntime.availableProcessors + 1
     override final val queue = 100
     override final val batch = 10
-    override final lazy val executor = Executors.newFixedThreadPool(parallelism, daemonThreadFactory(getClass.getName))
+    override final lazy val executor = newFixedThreadPool(getClass.getName, threads = parallelism)
   }
 
   object DeterministicContext extends Context {
     override final val parallelism = 1
     override final val queue = 1
     override final val batch = 1
-    override final lazy val executor = Executors.newFixedThreadPool(1, daemonThreadFactory(getClass.getName))
+    override final lazy val executor = newFixedThreadPool(getClass.getName, threads = 1)
   }
 
 }
