@@ -18,12 +18,7 @@ class MergeSuite extends WordSpec with ShouldMatchers {
   "Skiis" should {
     implicit val context = Skiis.DefaultContext
 
-    val big = new Skiis.Context {
-      override val parallelism = 10
-      override val queue = 1
-      override val batch = 1
-      override val executor = Executors.newFixedThreadPool(parallelism)
-    }
+    val big = Skiis.newContext("MergeSuite", parallelism = 10)
 
     // torture-test Skiis.merge()
     for (i <- 1 to 1000) {

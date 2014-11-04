@@ -16,12 +16,7 @@ class ParForeachSuite extends WordSpec with ShouldMatchers {
   "Skiis" should {
     implicit val context = Skiis.DefaultContext
 
-    val big = new Skiis.Context {
-      override val parallelism = 10
-      override val queue = 1
-      override val batch = 1
-      override val executor = Executors.newFixedThreadPool(parallelism)
-    }
+    val big = Skiis.newContext("ParForeachSuite", parallelism = 10)
 
     for (i <- 1 to 100) {
       ("parForeach %d" format i) in {

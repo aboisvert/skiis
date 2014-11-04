@@ -13,19 +13,13 @@ class ParMapSuite extends WordSpec with ShouldMatchers {
   val r = new scala.util.Random
 
   "Skiis" should {
-    // implicit val context = Skiis.DefaultContext
-
 
     for (i <- 1 to 10) {
-
       implicit val context = new Skiis.Context {
         override lazy val parallelism = r.nextInt(8) + 8
         override lazy val queue = r.nextInt(100) + 1
         override lazy val batch = r.nextInt(10) + 1
-        override lazy val executor = Executors.newFixedThreadPool(
-          /* threads */ parallelism + 1,
-          daemonThreadFactory("ParMapSuite")
-        )
+        override lazy val executor = Skiis.newFixedThreadPool("ParMapSuite", threads = parallelism + 1)
       }
 
       ("parMap %d" format i) in {
