@@ -511,14 +511,13 @@ trait Skiis[+T] extends { self =>
 
     private val available = new Condition(lock)
 
-    protected final def enqueue(output: U) = {
+    protected final def enqueue(output: U): Unit = {
       results.put(Some(output))
       available.signal()
     }
 
-    protected final def enqueue(outputs: Seq[U]) = {
-      outputs foreach { output => results.put(Some(output)) }
-      available.signalAll()
+    protected final def enqueue(outputs: Seq[U]): Unit = {
+      outputs foreach { enqueue(_) }
     }
 
     override final def notifyExceptionOrCancelled() = available.signalAll()
