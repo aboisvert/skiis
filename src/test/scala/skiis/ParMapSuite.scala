@@ -53,6 +53,15 @@ class ParMapSuite extends WordSpec with ShouldMatchers {
         acc3.get should be === 1000
         acc4.get should be === (1 to 1000).sum
       }
+
+      ("parFlatMap %d" format i) in {
+        val skiis = Skiis(1 to 1000) parFlatMap { i =>
+          Thread.sleep(r.nextInt(50))
+          val len = i % 100
+          (1 to len).toSeq
+        }
+        skiis.force().sum should be === 1666500
+      }
     }
   }
 }
