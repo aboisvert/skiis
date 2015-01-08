@@ -76,5 +76,19 @@ class QueueSuite extends WordSpec with ShouldMatchers {
         }
       }
     }
+
+    "an exception raised within a Skiis operation should be reported" in {
+      implicit val context = Skiis.newContext("queue", 10, 10, 1)
+
+      def f(x: Int) = { throw new Exception("foo"); 1 }
+
+      def testWithIterations(iterations: Int) = {
+        (the [Exception] thrownBy {
+          Skiis(1 to iterations).parMap(i => f(i)).toIterator.to[Vector]
+        }).getMessage shouldBe "foo"
+      }
+
+      for (i <- 1 to 1000) testWithIterations(i)
+    }
   }
 }

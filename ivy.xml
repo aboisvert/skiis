@@ -23,7 +23,7 @@
 
       <!-- test -->
       <dependency org="junit" name="junit" rev="4.8.2" conf="test"/>
-      <dependency org="org.scalatest" name="scalatest_2.10" rev="1.9.1" conf="test"/>
+      <dependency org="org.scalatest" name="scalatest_2.10" rev="2.1.0" conf="test"/>
 
       <exclude org="scala" module="scala" conf="eclipse" />
 
