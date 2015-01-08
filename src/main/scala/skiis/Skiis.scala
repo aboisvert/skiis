@@ -553,6 +553,7 @@ trait Skiis[+T] extends { self =>
           startWorkers()
           available.await(deadline - System.currentTimeMillis)
         }
+        bailOutIfNecessary()
       } finally {
         lock.unlock()
       }

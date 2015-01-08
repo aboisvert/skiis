@@ -1,4 +1,4 @@
 scala.version: 2.10.2
-scala.test: org.scalatest:scalatest_2.10:jar:2.0.M6-SNAP9
+scala.test: org.scalatest:scalatest_2.10:jar:2.1.0
 scala.check: org.scalacheck:scalacheck_2.10:jar:1.10.0
 
