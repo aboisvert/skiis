@@ -235,6 +235,7 @@ trait Skiis[+T] extends { self =>
             bailOutIfNecessary()
             completed.await()
           }
+          bailOutIfNecessary()
         } finally {
           lock.unlock()
         }
@@ -436,7 +437,6 @@ trait Skiis[+T] extends { self =>
     protected def notifyPossiblyNoMore(): Unit
 
     private def reportException(t: Throwable): Unit = {
-      t.printStackTrace()
       lock.lock()
       try {
         if (cancelled == false && exception == null) exception = t
