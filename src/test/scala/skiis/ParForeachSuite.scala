@@ -18,6 +18,19 @@ class ParForeachSuite extends WordSpec with ShouldMatchers {
 
     val big = Skiis.newContext("ParForeachSuite", parallelism = 10)
 
+    "parForeach should report exceptions" in {
+
+      def f(x: Int) = { throw new Exception("foo") }
+
+      def testWithIterations(iterations: Int) = {
+        (the [Exception] thrownBy {
+          Skiis(1 to iterations).parForeach(i => f(i))
+        }).getMessage shouldBe "foo"
+      }
+
+      for (i <- 1 to 1000) testWithIterations(i)
+    }
+
     for (i <- 1 to 100) {
       ("parForeach %d" format i) in {
         Skiis(1 to 10).parForeach({ s: Int =>
