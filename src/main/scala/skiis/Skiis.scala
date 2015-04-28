@@ -973,6 +973,19 @@ object Skiis {
     override def toString = {
       "%s(executor=%s, parallelism=%d, queue=%d, batch=%d)" format (getClass.getSimpleName, executor, parallelism, queue, batch)
     }
+
+    def copy(parallelism: Int = this.parallelism, queue: Int = this.queue, batch: Int = this.batch, executor: ExecutorService = this.executor): Context = {
+      val _parallelism = parallelism
+      val _queue = queue
+      val _batch = batch
+      val _executor = executor
+      new Context {
+        override final val parallelism = _parallelism
+        override final val queue = _queue
+        override final val batch = _batch
+        override final val executor = _executor
+      }
+    }
   }
 
   object DefaultContext extends Context {
