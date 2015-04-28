@@ -536,7 +536,7 @@ trait Skiis[+T] extends { self =>
      */
     def next(timeout: Long, unit: TimeUnit): Option[U] = {
       val start = System.currentTimeMillis
-      var deadline = if (timeout >= 0) {
+      val deadline = if (timeout >= 0) {
         System.currentTimeMillis + unit.toMillis(timeout)
       } else {
         Long.MaxValue
