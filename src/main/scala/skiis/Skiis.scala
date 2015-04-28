@@ -867,6 +867,7 @@ object Skiis {
   final class Queue[T](val size: Int) extends Skiis[T] {
     private[this] val queue = new LinkedBlockingQueue[T](size)
     private[this] var closed = false
+    private[this] var closedImmediately = false
     private[this] val lock = new ReentrantLock()
     private[this] val empty = lock.newCondition()
     private[this] val full = lock.newCondition()
@@ -897,10 +898,10 @@ object Skiis {
       }
     }
 
-    def close() {
+    def close(immediately: Boolean = false) {
       lock.lock()
       try {
-        closed = true
+        if(immediately) closedImmediately = true else closed = true
         empty.signalAll()
       } finally {
         lock.unlock()
@@ -911,13 +912,15 @@ object Skiis {
       lock.lock()
       try {
         while (true) {
-          if (closed) return None
+          if (closedImmediately) return None
           val n = queue.poll()
           if (n != null) {
             full.signal()
             return Some(n)
+          } else {
+            if (closed) return None
+            empty.await()
           }
-          empty.await()
         }
         sys.error("unreachable")
       } finally {
