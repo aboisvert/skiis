@@ -545,12 +545,11 @@ trait Skiis[+T] extends { self =>
      try {
         while (workersOutstanding > 0 || !noMore || results.size > 0) {
           bailOutIfNecessary()
+          startWorkers()
           val next = results.poll()
           if (next != null) {
-            startWorkers()
             return next
           }
-          startWorkers()
           available.await(deadline - System.currentTimeMillis)
         }
         bailOutIfNecessary()
