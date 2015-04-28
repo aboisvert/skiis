@@ -98,6 +98,8 @@ class QueueSuite extends WordSpec with ShouldMatchers {
 
       val stageOne = Skiis.async("test") {
         stageOneValues.foreach { t =>
+          // We are making the queue take some time so we can check
+          // for values.
           Thread sleep 100
           stageTwoValues += t
         }
@@ -126,6 +128,33 @@ class QueueSuite extends WordSpec with ShouldMatchers {
         c.completed should be === true
       }
 
+      
+    }
+    
+    "should not finish processing when closeNow is called" in {
+      val testSize = 20
+      val stageOneValues = new Skiis.Queue[Int](testSize)
+      val inputs = (1 to testSize).map(i => i)
+      implicit lazy val context = Skiis.DeterministicContext
+      
+      val fizz = stageOneValues parMap fizzBuzz
+      
+      val c = consumer(fizz.toIterator, sleep = 500)
+      new Thread(c).start()
+      
+      // We should have between 0 and 19 at this point. 
+      c.synchronized{
+        c.elements.size shouldBe 9 +- 10
+      }
+      
+      stageOneValues.closeNow()
+      c.waitUntilCompleted()
+      // We should complete the method, and not complete the entire test size.
+      c.synchronized {
+        c.started should be === true
+        c.elements.size should not be testSize
+        c.completed should be === true
+      }
       
     }
   }
