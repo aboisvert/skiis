@@ -899,6 +899,23 @@ object Skiis {
     }
 
     def close() {
+      try {
+        while (true) {
+          lock.lock()
+          if (queue.size <= 0) {
+            closed = true
+            empty.signalAll()
+            return
+          }
+          lock.unlock()
+          Thread.sleep(10)
+        }
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    def closeNow() {
       lock.lock()
       try {
         closed = true

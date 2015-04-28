@@ -1,10 +1,8 @@
 package skiis
 
 import java.util.concurrent.Executors
-
 import org.scalatest.WordSpec
 import org.scalatest.matchers.ShouldMatchers
-
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 import scala.language.{ postfixOps, reflectiveCalls }
@@ -89,6 +87,46 @@ class QueueSuite extends WordSpec with ShouldMatchers {
       }
 
       for (i <- 1 to 1000) testWithIterations(i)
+    }
+
+    "should not close until everything is completed" in {
+      val testSize = 20
+      val stageOneValues = new Skiis.Queue[Int](testSize)
+      val stageTwoValues = new Skiis.Queue[Int](testSize/4)
+      val inputs = (1 to testSize).map(i => i)
+      implicit lazy val context = Skiis.DeterministicContext
+
+      val stageOne = Skiis.async("test") {
+        stageOneValues.foreach { t =>
+          Thread sleep 100
+          stageTwoValues += t
+        }
+      }
+      Skiis(inputs).parForeach { stageOneValues += _ }
+      
+      val fizz = stageTwoValues parMap fizzBuzz
+      
+      val c = consumer(fizz.toIterator)
+      new Thread(c).start()
+      
+      // We should have between 0 and 19 at this point. 
+      c.synchronized{
+        c.elements.size shouldBe 9 +- 10
+      }
+      // Close the first queue when empty
+      stageOneValues.close
+      // Join the first stage when it's done
+      stageOne.join()
+      stageTwoValues.close
+      
+      c.waitUntilCompleted()
+      c.synchronized {
+        c.started should be === true
+        c.elements.size should be === testSize
+        c.completed should be === true
+      }
+
+      
     }
   }
 }
