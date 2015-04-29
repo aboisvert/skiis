@@ -536,7 +536,7 @@ trait Skiis[+T] extends { self =>
      */
     def next(timeout: Long, unit: TimeUnit): Option[U] = {
       val start = System.currentTimeMillis
-      var deadline = if (timeout >= 0) {
+      val deadline = if (timeout >= 0) {
         System.currentTimeMillis + unit.toMillis(timeout)
       } else {
         Long.MaxValue
@@ -545,12 +545,11 @@ trait Skiis[+T] extends { self =>
      try {
         while (workersOutstanding > 0 || !noMore || results.size > 0) {
           bailOutIfNecessary()
+          startWorkers()
           val next = results.poll()
           if (next != null) {
-            startWorkers()
             return next
           }
-          startWorkers()
           available.await(deadline - System.currentTimeMillis)
         }
         bailOutIfNecessary()
@@ -868,6 +867,7 @@ object Skiis {
   final class Queue[T](val size: Int) extends Skiis[T] {
     private[this] val queue = new LinkedBlockingQueue[T](size)
     private[this] var closed = false
+    private[this] var closedImmediately = false
     private[this] val lock = new ReentrantLock()
     private[this] val empty = lock.newCondition()
     private[this] val full = lock.newCondition()
@@ -898,10 +898,10 @@ object Skiis {
       }
     }
 
-    def close() {
+    def close(immediately: Boolean = false) {
       lock.lock()
       try {
-        closed = true
+        if (immediately) closedImmediately = true else closed = true
         empty.signalAll()
       } finally {
         lock.unlock()
@@ -912,13 +912,15 @@ object Skiis {
       lock.lock()
       try {
         while (true) {
-          if (closed) return None
+          if (closedImmediately) return None
           val n = queue.poll()
           if (n != null) {
             full.signal()
             return Some(n)
+          } else {
+            if (closed) return None
+            empty.await()
           }
-          empty.await()
         }
         sys.error("unreachable")
       } finally {
@@ -973,6 +975,19 @@ object Skiis {
 
     override def toString = {
       "%s(executor=%s, parallelism=%d, queue=%d, batch=%d)" format (getClass.getSimpleName, executor, parallelism, queue, batch)
+    }
+
+    def copy(parallelism: Int = this.parallelism, queue: Int = this.queue, batch: Int = this.batch, executor: ExecutorService = this.executor): Context = {
+      val _parallelism = parallelism
+      val _queue = queue
+      val _batch = batch
+      val _executor = executor
+      new Context {
+        override final val parallelism = _parallelism
+        override final val queue = _queue
+        override final val batch = _batch
+        override final val executor = _executor
+      }
     }
   }
 
