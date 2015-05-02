@@ -380,6 +380,11 @@ trait Skiis[+T] extends { self =>
     }
   }
 
+  /** See Skiis.merge(Skiis[T]*) */
+  def merge[TT >: T](other: Skiis[TT]): Skiis[TT] = {
+    Skiis.merge(this, other)
+  }
+
   /** Concatenate elements from another Skiis[T].
    *
    *  e.g., Skiis(1,2,3) ++ Skiis(4,5) => Skiis(1,2,3,4,5)
