@@ -14,30 +14,34 @@ class ParForeachSuite extends WordSpec with ShouldMatchers {
   val r = new scala.util.Random
 
   "Skiis" should {
-    implicit val context = Skiis.DefaultContext
+    val context = Skiis.DefaultContext
 
-    val big = Skiis.newContext("ParForeachSuite", parallelism = 10)
+    val big = Skiis.newContext("ParForeachSuite-big", parallelism = 10)
 
-    "parForeach should report exceptions" in {
+    "report exceptions in parForeach" in {
 
       def f(x: Int) = { throw new Exception("foo") }
 
       def testWithIterations(iterations: Int) = {
         (the [Exception] thrownBy {
-          Skiis(1 to iterations).parForeach(i => f(i))
+          Skiis(1 to iterations).parForeach(i => f(i))(context)
         }).getMessage shouldBe "foo"
       }
 
-      for (i <- 1 to 1000) testWithIterations(i)
+      for (i <- 1 to 1000 by 10) testWithIterations(i)
     }
 
-    for (i <- 1 to 100) {
+    val small = Skiis.newContext("ParForeachSuite-small", parallelism = 5)
+
+    val tortureLevel = Option(System.getenv("TORTURE")) map (_.toInt) getOrElse 1
+
+    for (i <- 1 to tortureLevel) {
       ("parForeach %d" format i) in {
         Skiis(1 to 10).parForeach({ s: Int =>
           for (j <- 1 to 100) {
             val n = r.nextInt(j)
             val acc = new java.util.concurrent.atomic.AtomicInteger()
-            Skiis(1 to n) parForeach { i => acc.incrementAndGet(); Thread.sleep(r.nextInt(10)) }
+            Skiis(1 to n).parForeach { i => acc.incrementAndGet(); Thread.sleep(r.nextInt(10)) }(small)
             if (j % 10 == 1) print(".")
             acc.get should be === n
           }

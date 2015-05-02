@@ -3,10 +3,10 @@ package skiis
 import java.util.concurrent._
 import java.util.concurrent.atomic._
 import java.util.concurrent.locks._
-
 import scala.annotation.tailrec
 import scala.annotation.unchecked.uncheckedVariance
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.generic.CanBuildFrom
 
 /** "Parallel Skiis"
  *
@@ -18,7 +18,7 @@ import scala.collection.mutable.ArrayBuffer
  *  stream-fusion.
  *
  *  The parMap(), parFlatMap(), parFilter(), etc. methods are parallel operations leveraging
- *  implicit executor and desired level of parallelism.  See Skiis.Context.
+ *  an executor and desired level of parallelism.  See Skiis.Context.
  */
 trait Skiis[+T] extends { self =>
   import Skiis._
@@ -197,31 +197,50 @@ trait Skiis[+T] extends { self =>
     }
   }
 
-  /** "Pull" all values from the collection, forcing evaluation of previous lazy computation. */
-  def pull(): Unit = {
+  /** Force evaluation of previous lazy computation in a serialized (read: fully synchronized) context */
+  def serialize(): Skiis[T] = Skiis(toIterator)
+
+  /** "Pull" all values from the collection using a single (separate) thread, forcing evaluation of previous lazy computation,
+   *    and enqueue them in a Skiis.Queue collection  of up to `queueSize` size.
+   */
+  def pull(queueSize: Int): Skiis[T] = {
+    val queue = new Queue[T](queueSize)
+    Skiis.async("pull") {
+      this foreach { queue += _ }
+      queue.close()
+    }
+    queue
+  }
+
+  /** "Pull" all values from the collection using the given context, forcing evaluation of previous lazy computation. */
+  def parPull(context: Context): Skiis[T] = {
+    parMap(identity)(context)
+  }
+
+  /** Force evaluation of previous lazy computations and discard all resulting values. */
+  def discardAll(): Unit = {
     foreach { _ => () }
   }
 
-  def parPull()(implicit context: Context) {
-    parForeachAsync { _ => () }.result // block for result
-  }
+  /** Force evaluation of the collection and convert this Skiis to a collection of type `Col` */
+  def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, T, Col[T @uncheckedVariance]]): Col[T @uncheckedVariance] = toIterator.to[Col]
 
   /** Force evaluation of the collection and return all elements in a strict (non-lazy) Seq. */
-  def force(): Seq[T] =  toIterator.to[Vector]
+  def force(): Seq[T] = to[Vector]
 
-  /** Force evaluation of the collection (in parallel) and return all elements in a strict (non-lazy) Seq. */
-  def parForce()(implicit context: Context): Seq[T] = {
-    parMap(identity).toIterator.to[Vector]
+  def parForce(context: Context): Seq[T] = {
+    parPull(context)
+    force()
   }
 
   /** Applies a function `f` in parallel to all elements of this collection */
-  def parForeach(f: T => Unit)(implicit context: Context) {
-    parForeachAsync(f).result // block for result
+  def parForeach(f: T => Unit)(context: Context) {
+    parForeachAsync(f)(context).result // block for result
   }
 
   /** Applies a function `f` in parallel to all elements of this collection */
-  def parForeachAsync(f: T => Unit)(implicit context: Context): Control with Result[Unit] = {
-    val job = new Job[Unit]() with Result[Unit] {
+  def parForeachAsync(f: T => Unit)(context: Context): Control with Result[Unit] = {
+    val job = new Job[Unit](context) with Result[Unit] {
       private val completed = new Condition(lock)
       override def process(t: T) = f(t)
       override def notifyExceptionOrCancelled() = completed.signalAll()
@@ -248,8 +267,8 @@ trait Skiis[+T] extends { self =>
   }
 
   /** Transform elements of this collection in parallel using `f` and return a new collection. */
-  def parMap[U](f: T => U)(implicit context: Context): Skiis[U] = {
-    val job = new Job[U]() with Queuing[U] {
+  def parMap[U](f: T => U)(context: Context): Skiis[U] = {
+    val job = new Job[U](context) with Queuing[U] {
       override def process(t: T) = enqueue(f(t))
     }
     job.start()
@@ -260,8 +279,8 @@ trait Skiis[+T] extends { self =>
    *  producing zero-or-more  outputs per input element and return a new collection
    *  concatenating all the outputs.
    */
-  def parFlatMap[U](f: T => Seq[U])(implicit context: Context): Skiis[U] = {
-    val job = new Job[U]() with Queuing[U] {
+  def parFlatMap[U](f: T => Seq[U])(context: Context): Skiis[U] = {
+    val job = new Job[U](context) with Queuing[U] {
       override def process(t: T) =  enqueue(f(t))
     }
     job.start()
@@ -269,8 +288,8 @@ trait Skiis[+T] extends { self =>
   }
 
   /** Selects (in parallel) all elements of this collection which satisfy a predicate. */
-  def parFilter(f: T => Boolean)(implicit context: Context): Skiis[T] = {
-    val job = new Job[T]() with Queuing[T] {
+  def parFilter(f: T => Boolean)(context: Context): Skiis[T] = {
+    val job = new Job[T](context) with Queuing[T] {
       override def process(t: T) =  { if (f(t)) enqueue(t) }
     }
     job.start()
@@ -278,8 +297,8 @@ trait Skiis[+T] extends { self =>
   }
 
   /** Selects (in parallel) all elements of this collection which do not satisfy a predicate. */
-  def parFilterNot(f: T => Boolean)(implicit context: Context): Skiis[T] = {
-    val job = new Job[T]() with Queuing[T] {
+  def parFilterNot(f: T => Boolean)(context: Context): Skiis[T] = {
+    val job = new Job[T](context) with Queuing[T] {
       override def process(t: T) =  { if (!f(t)) enqueue(t) }
     }
     job.start()
@@ -287,16 +306,16 @@ trait Skiis[+T] extends { self =>
   }
 
   /** Filter and transform elements of this collection (in parallel) using the partial function `f` */
-  def parCollect[U](f: PartialFunction[T, U])(implicit context: Context): Skiis[U] = {
-    val job = new Job[U]() with Queuing[U] {
+  def parCollect[U](f: PartialFunction[T, U])(context: Context): Skiis[U] = {
+    val job = new Job[U](context) with Queuing[U] {
       override def process(t: T) =  { if (f.isDefinedAt(t)) enqueue(f(t)) }
     }
     job.start()
     job
   }
 
-  def parReduce[TT >: T](f: (TT, T) => TT)(implicit context: Context): TT = {
-    val job = new Job[T]() with Result[TT] {
+  def parReduce[TT >: T](f: (TT, T) => TT)(context: Context): TT = {
+    val job = new Job[T](context) with Result[TT] {
       private val acc = new AtomicReference[TT]()
 
       private val completed = new Condition(lock)
@@ -378,7 +397,7 @@ trait Skiis[+T] extends { self =>
   }
 
   /** Job holds completion status and computation output */
-  private[Skiis] abstract class Job[U](implicit val context: Context) extends Control { job =>
+  private[Skiis] abstract class Job[U](val context: Context) extends Control { job =>
     protected val lock = new ReentrantLock()
     protected var workersOutstanding = 0
     protected var cancelled = false
@@ -675,6 +694,13 @@ object Skiis {
     Executors.newFixedThreadPool(threads, newDaemonThreadFactory(name))
   }
 
+  /** Creates a new cached thread pool that creates new threads as needed, but will reuse previously constructed threads
+   *   when they are available.
+  */
+  def newCachedThreadPool(name: String) = {
+    Executors.newCachedThreadPool(newDaemonThreadFactory(name))
+  }
+
   /** Creates a Skiis Context with a new fixed-size underlying thread pool of `parallelism` threads,
    *  with optional `queue` and `batch` configuration (both of which default to `1` unless provided).
    *
@@ -688,6 +714,7 @@ object Skiis {
       override final val parallelism = _parallelism
       override final val queue = _queue
       override final val batch = _batch
+      override final val shutdownExecutor = true
       override final lazy val executor = newFixedThreadPool(name, parallelism)
     }
   }
@@ -856,11 +883,6 @@ object Skiis {
     t
   }
 
-  /** Submit some computation `f` into the (implicit/explicit) context's executor. */
-  def submit[T](f: => T)(implicit c: Context) = {
-    c.executor.submit(new Runnable() { override def run() { f } })
-  }
-
   /** A Skiis[T] collection backed by a LinkedBlockingQueue[T]
    *  that allows "pushing" elements to consumers.
    */
@@ -973,20 +995,35 @@ object Skiis {
     /** Underlying executor service, e.g., FixedThreadPool, ForkJoin, ... */
     val executor: ExecutorService
 
+    val shutdownExecutor: Boolean
+
+    /** Submit some computation `f` into the context's executor. */
+    def submit[T](f: => T) = {
+      executor.submit(new Runnable() { override def run() { f } })
+    }
+
+    def shutdown(now: Boolean = false): Unit = {
+      if (shutdownExecutor) {
+        if (now) executor.shutdownNow() else executor.shutdown()
+      }
+    }
+
     override def toString = {
       "%s(executor=%s, parallelism=%d, queue=%d, batch=%d)" format (getClass.getSimpleName, executor, parallelism, queue, batch)
     }
 
-    def copy(parallelism: Int = this.parallelism, queue: Int = this.queue, batch: Int = this.batch, executor: ExecutorService = this.executor): Context = {
+    def copy(parallelism: Int = this.parallelism, queue: Int = this.queue, batch: Int = this.batch, executor: ExecutorService = this.executor, shutdownExecutor: Boolean = false): Context = {
       val _parallelism = parallelism
       val _queue = queue
       val _batch = batch
       val _executor = executor
+      val _shutdownExecutor = shutdownExecutor
       new Context {
         override final val parallelism = _parallelism
         override final val queue = _queue
         override final val batch = _batch
         override final val executor = _executor
+        override final val shutdownExecutor = _shutdownExecutor
       }
     }
   }
@@ -995,6 +1032,7 @@ object Skiis {
     override final val parallelism = Runtime.getRuntime.availableProcessors + 1
     override final val queue = 100
     override final val batch = 10
+    override final val shutdownExecutor = true
     override final lazy val executor = newFixedThreadPool(getClass.getName, threads = parallelism)
   }
 
@@ -1002,7 +1040,11 @@ object Skiis {
     override final val parallelism = 1
     override final val queue = 1
     override final val batch = 1
+    override final val shutdownExecutor = true
     override final lazy val executor = newFixedThreadPool(getClass.getName, threads = 1)
   }
 
+  object DirectExecutor extends Executor {
+    def execute(r: Runnable): Unit = { r.run() }
+  }
 }

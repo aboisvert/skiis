@@ -33,11 +33,11 @@ class QueueSuite extends WordSpec with ShouldMatchers {
   }
 
   "Skiis.Queue" should {
-    implicit val context = Skiis.DefaultContext
+    val context = Skiis.DefaultContext
 
     "push elements to consumers" in {
       val queue = new Skiis.Queue[Int](10)
-      val fizz = queue parMap fizzBuzz
+      val fizz = queue.parMap(fizzBuzz)(context)
 
       // start the consumer on a separate thread
       val c = consumer(fizz.toIterator)
@@ -58,7 +58,7 @@ class QueueSuite extends WordSpec with ShouldMatchers {
     "block and resume producer when pushing elements to slow consumers" in {
       for (size <- 1 to 10) {
         val queue = new Skiis.Queue[Int](size)
-        val fizz = queue parMap fizzBuzz
+        val fizz = queue.parMap(fizzBuzz)(context)
 
         // start the consumer on a separate thread
         val c = consumer(fizz.toIterator, sleep = 1)
@@ -78,13 +78,13 @@ class QueueSuite extends WordSpec with ShouldMatchers {
     }
 
     "an exception raised within a Skiis operation should be reported" in {
-      implicit val context = Skiis.newContext("queue", 10, 10, 1)
+      val context = Skiis.newContext("queue", 10, 10, 1)
 
       def f(x: Int) = { throw new Exception("foo"); 1 }
 
       def testWithIterations(iterations: Int) = {
         (the [Exception] thrownBy {
-          Skiis(1 to iterations).parMap(i => f(i)).toIterator.to[Vector]
+          Skiis(1 to iterations).parMap(i => f(i))(context).toIterator.to[Vector]
         }).getMessage shouldBe "foo"
       }
 

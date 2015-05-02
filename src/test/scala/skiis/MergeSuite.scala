@@ -16,12 +16,14 @@ class MergeSuite extends WordSpec with ShouldMatchers {
   def random(n: Int) = math.abs(r.nextInt) % n
 
   "Skiis" should {
-    implicit val context = Skiis.DefaultContext
+    val context = Skiis.DefaultContext
 
     val big = Skiis.newContext("MergeSuite", parallelism = 10)
 
+    val torture = Option(System.getenv("TORTURE")) map (_.toInt) getOrElse 1
+
     // torture-test Skiis.merge()
-    for (i <- 1 to 1000) {
+    for (i <- 1 to torture) {
       ("merge %d" format i) in {
         val ranges = for (r <- 1 to (random(100) + 10)) yield (1 to (r + random(10000)))
         val skiis = ranges map { r => Skiis.apply(r.iterator) }
@@ -32,11 +34,11 @@ class MergeSuite extends WordSpec with ShouldMatchers {
 
         val actualTotal = new java.util.concurrent.atomic.AtomicInteger()
         val n = new java.util.concurrent.atomic.AtomicInteger()
-        merged parForeach { x =>
+        merged.parForeach { x =>
           if (random(1000) == 0) Thread.sleep(1)
           actualTotal.addAndGet(x)
           n.incrementAndGet()
-        }
+        }(context)
 
         actualTotal.get should be === expectedTotal
         println("total adds: " + n.get)
