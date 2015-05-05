@@ -29,9 +29,9 @@ class ParFlatMapSuite extends WordSpec with ShouldMatchers {
          .parFlatMap { x =>
            if (randomInt(10) % 5 == 0) {
              Thread.sleep(randomInt(3));
-             Seq.fill(10)(x)
+             Skiis(Seq.fill(10)(x))
            } else {
-             Seq.empty
+             Skiis.empty
            }
          }(ctx2)
        .grouped(7)

@@ -214,7 +214,11 @@ trait Skiis[+T] extends { self =>
 
   /** "Pull" all values from the collection using the given context, forcing evaluation of previous lazy computation. */
   def parPull(context: Context): Skiis[T] = {
-    parMap(identity)(context)
+    val job = new Job[T](context) with Queuing[T] {
+      override def process(t: T) = enqueue(t)
+    }
+    job.start()
+    job
   }
 
   /** Force evaluation of previous lazy computations and discard all resulting values. */
@@ -266,52 +270,22 @@ trait Skiis[+T] extends { self =>
   }
 
   /** Transform elements of this collection in parallel using `f` and return a new collection. */
-  def parMap[U](f: T => U)(context: Context): Skiis[U] = {
-    val job = new Job[U](context) with Queuing[U] {
-      override def process(t: T) = enqueue(f(t))
-    }
-    job.start()
-    job
-  }
+  def parMap[U](f: T => U)(context: Context): Skiis[U] = this.map(f).parPull(context)
 
   /** Transform elements of this collection in parallel with the function `f`
    *  producing zero-or-more  outputs per input element and return a new collection
    *  concatenating all the outputs.
    */
-  def parFlatMap[U](f: T => Seq[U])(context: Context): Skiis[U] = {
-    val job = new Job[U](context) with Queuing[U] {
-      override def process(t: T) =  enqueue(f(t))
-    }
-    job.start()
-    job
-  }
+  def parFlatMap[U](f: T => Skiis[U])(context: Context): Skiis[U] = this.flatMap(f).parPull(context)
 
   /** Selects (in parallel) all elements of this collection which satisfy a predicate. */
-  def parFilter(f: T => Boolean)(context: Context): Skiis[T] = {
-    val job = new Job[T](context) with Queuing[T] {
-      override def process(t: T) =  { if (f(t)) enqueue(t) }
-    }
-    job.start()
-    job
-  }
+  def parFilter(f: T => Boolean)(context: Context): Skiis[T] = this.filter(f).parPull(context)
 
   /** Selects (in parallel) all elements of this collection which do not satisfy a predicate. */
-  def parFilterNot(f: T => Boolean)(context: Context): Skiis[T] = {
-    val job = new Job[T](context) with Queuing[T] {
-      override def process(t: T) =  { if (!f(t)) enqueue(t) }
-    }
-    job.start()
-    job
-  }
+  def parFilterNot(f: T => Boolean)(context: Context): Skiis[T] = this.filterNot(f).parPull(context)
 
   /** Filter and transform elements of this collection (in parallel) using the partial function `f` */
-  def parCollect[U](f: PartialFunction[T, U])(context: Context): Skiis[U] = {
-    val job = new Job[U](context) with Queuing[U] {
-      override def process(t: T) =  { if (f.isDefinedAt(t)) enqueue(f(t)) }
-    }
-    job.start()
-    job
-  }
+  def parCollect[U](f: PartialFunction[T, U])(context: Context): Skiis[U] = this.collect(f).parPull(context)
 
   def parReduce[TT >: T](f: (TT, T) => TT)(context: Context): TT = {
     val job = new Job[T](context) with Result[TT] {

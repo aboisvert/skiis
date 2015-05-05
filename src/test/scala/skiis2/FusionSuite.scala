@@ -30,7 +30,7 @@ class FusionSuite extends WordSpec with ShouldMatchers {
       val mapped = (Skiis(1 to 4)
         map (_ * 2)
         flatMap { i => Skiis(i, i+1) }
-        flatMap { i => Skiis.singleton(i) }
+        flatMap { i => Skiis(i) }
         map identity
       )
       mapped.isInstanceOf[Skiis.FlatMapOp[_]] should be === true
