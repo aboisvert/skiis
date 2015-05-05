@@ -1,4 +1,4 @@
-package skiis
+package skiis2
 
 import java.util.concurrent.Executors
 
@@ -260,6 +260,10 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
 
     "merge/interleave several Skiis" in {
        Skiis.merge(Skiis(1,2,3), Skiis(4,5), Skiis(6,7,8,9)).toIterator.toList should be === List(1,4,6,2,5,7,3,8,9)
+    }
+
+    "merge two Skiis" in {
+       (Skiis(1, 2, 3) merge Skiis(4, 5)).to[List] should be === List(1,4,2,5,3)
     }
 
     "run previous computations seriallly when using `serialize`" in {

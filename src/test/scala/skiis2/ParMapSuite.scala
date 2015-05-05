@@ -1,4 +1,4 @@
-package skiis
+package skiis2
 
 import java.util.concurrent.Executors
 import org.scalatest.WordSpec

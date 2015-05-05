@@ -1,4 +1,4 @@
-package skiis
+package skiis2
 
 import java.util.concurrent._
 import java.util.concurrent.atomic._
@@ -229,8 +229,7 @@ trait Skiis[+T] extends { self =>
   def force(): Seq[T] = to[Vector]
 
   def parForce(context: Context): Seq[T] = {
-    parPull(context)
-    force()
+    parPull(context).force()
   }
 
   /** Applies a function `f` in parallel to all elements of this collection */
@@ -383,6 +382,20 @@ trait Skiis[+T] extends { self =>
   /** See Skiis.merge(Skiis[T]*) */
   def merge[TT >: T](other: Skiis[TT]): Skiis[TT] = {
     Skiis.merge(this, other)
+  }
+
+  def fork(queueSize: Int = 1): (Skiis[T], Skiis[T]) = {
+    val queue1 = new Queue[T](1)
+    val queue2 = new Queue[T](1)
+    Skiis.async("fork") {
+      this foreach { x =>
+        queue1 += x
+        queue2 += x
+      }
+      queue1.close()
+      queue2.close()
+    }
+    (queue1, queue2)
   }
 
   /** Concatenate elements from another Skiis[T].
