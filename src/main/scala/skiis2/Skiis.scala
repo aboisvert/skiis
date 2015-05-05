@@ -684,17 +684,17 @@ object Skiis {
     *
     *  You can think of this as a function T => Seq[U] defined in continuation-passing style.
     */
-  private[skiis] trait ApplyContinuation[-T, +U] {
+  private[skiis2] trait ApplyContinuation[-T, +U] {
     /** Processes the next element `x` and invokes `continuation` for each resulting element. */
     def apply(x: T, continuation: U => Unit): Unit
   }
 
   /** Convenient to generate universally-quantified continuation types */
-  private[skiis] type Continuation[U] = ApplyContinuation[Any, U]
+  private[skiis2] type Continuation[U] = ApplyContinuation[Any, U]
 
   /** Coerse existentially-quantified continuations into universally-quantified continuations */
   @inline
-  private[skiis] def universal[U](x: ApplyContinuation[_, U]) = x.asInstanceOf[Continuation[U]]
+  private[skiis2] def universal[U](x: ApplyContinuation[_, U]) = x.asInstanceOf[Continuation[U]]
 
   /** Returns a ThreadFactory that creates named + numbered daemon threads */
   def newDaemonThreadFactory(name: String) = new ThreadFactory {
@@ -742,7 +742,7 @@ object Skiis {
     override def take(n: Int) = Seq.empty
   }
 
-  private[skiis] trait MapOp[T, U] extends Skiis[U] {
+  private[skiis2] trait MapOp[T, U] extends Skiis[U] {
     /** Previous Skiis collection in the chain; contains elements being consumed
      *  and to which the `f` operation is being applied.
      */
@@ -757,7 +757,7 @@ object Skiis {
     protected var f: T => U
 
     /** Sequence function `f2` to this map operation */
-    private[skiis] def compose[V](f2: U => V): MapOp[T, V] = {
+    private[skiis2] def compose[V](f2: U => V): MapOp[T, V] = {
       val updated = this.asInstanceOf[MapOp[T, V]]
       updated.f = f andThen f2
       updated
@@ -766,7 +766,7 @@ object Skiis {
     override def next() = previous.next() map f
   }
 
-  private[skiis] trait FlatMapOp[U] extends Skiis[U] { self =>
+  private[skiis2] trait FlatMapOp[U] extends Skiis[U] { self =>
     /** Previous Skiis collection in the chain; contains elements being consumed
      *  and to which the `enqueue` operation is being applied.
      */
@@ -802,7 +802,7 @@ object Skiis {
     private[this] var noMore = false
 
     /** Sequence a new operation to the existing operations */
-    private[skiis] def compose[T2, U2](f: Continuation[U] => ApplyContinuation[T2, U2]) = {
+    private[skiis2] def compose[T2, U2](f: Continuation[U] => ApplyContinuation[T2, U2]) = {
       val updated = self.asInstanceOf[FlatMapOp[U2]]
       updated.applyAndRunContinuation = f(universal(applyAndRunContinuation))
       updated
