@@ -29,7 +29,8 @@ view) than the standard Scala {serial, parallel} collections,
   pull-based streaming architecture.
 
 * Pluggable execution context -- you can easily plug your own `Executor`
-  (thread pool) and/or use a different `Executor` for different parallel operations.  (Note this deficiency only applies to Scala 2.9.x since 2.10.0
+  (thread pool) and/or use a different `Executor` for different parallel operations.  
+  (Note this deficiency only applies to Scala 2.9.x since 2.10.0
   introduced pluggable contexts).
 
 * Beyond pluging-in your own `Executor`, you can also control the level of
@@ -40,8 +41,9 @@ view) than the standard Scala {serial, parallel} collections,
   with other tasks (whether they use `Skiis` or not).
 
 * `Skiis[T]` exposes a `Control` trait that supports cancellation.
+  (This feature is currently experimental.)
 
-See `CHANGELOG` for evolution details.
+See `CHANGELOG.md` for evolution details.
 
 ### Performance ###
 
