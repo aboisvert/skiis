@@ -242,6 +242,7 @@ trait Skiis[+T] extends { self =>
   }
 
   /** Applies a function `f` in parallel to all elements of this collection */
+  @Experimental
   def parForeachAsync(f: T => Unit)(context: Context): Control with Result[Unit] = {
     val job = new Job[Unit](context) with Result[Unit] {
       private val completed = new Condition(lock)
@@ -571,6 +572,7 @@ trait Skiis[+T] extends { self =>
     }
   }
 
+  @Experimental
   private[Skiis] trait Result[U] {
     /** Block for result, may throw exception if underlying computation failed. */
     def result: U
@@ -966,6 +968,7 @@ object Skiis {
     }
   }
 
+  @Experimental
   trait Control {
     def cancel(): Unit
     def isCancelled: Boolean
@@ -1039,4 +1042,6 @@ object Skiis {
   object DirectExecutor extends Executor {
     def execute(r: Runnable): Unit = { r.run() }
   }
+
+  class Experimental extends scala.annotation.Annotation
 }
