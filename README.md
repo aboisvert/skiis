@@ -74,7 +74,7 @@ and you can then interactively try the Skiis[T] collections,
     scala> Skiis(1 to 10) map (_ * 2) filter (_ % 2 == 0)
     res1: skiis.Skiis[Int] = skiis.Skiis$$anon$11@456e5841
 
-    scala> res1.toIterator.toList
+    scala> res1.to[List]
     res4: List[Int] = List(4, 6, 8, 10, 12, 14, 16, 18, 20)
 
     // Parallel operations

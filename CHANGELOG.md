@@ -50,10 +50,10 @@ applications.
   accidental starvation/deadlocks if reused across multiple stages) and
   defaults to the following values:
 
-    val parallelism = (Runtime.getRuntime.availableProcessors + 1) * 10
-    val queue = parallelism
-    val batch = 1
-    val shutdownExecutor = true
+        val parallelism = (Runtime.getRuntime.availableProcessors + 1) * 10
+        val queue = parallelism
+        val batch = 1
+        val shutdownExecutor = true
 
   As the updated Scaladoc says, this context is not meant to be used in
   production applications.  It should only be useful to lazy programmers who
