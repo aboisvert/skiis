@@ -1023,24 +1023,40 @@ object Skiis {
     }
   }
 
+  /** A default context provided for convenience.
+   *
+   *  This context is not meant to be used in production applications.
+   *
+   *  It should only be useful to lazy programmers who want to conveniently ignore
+   *  best practices until their day of reckoning or when Murphy's law kicks in,
+   *  whichever comes first.
+   */
   object DefaultContext extends Context {
-    override final val parallelism = Runtime.getRuntime.availableProcessors + 1
-    override final val queue = 100
-    override final val batch = 10
+    override final val parallelism = (Runtime.getRuntime.availableProcessors + 1) * 10
+    override final val queue = parallelism
+    override final val batch = 1
     override final val shutdownExecutor = true
-    override final lazy val executor = newFixedThreadPool(getClass.getName, threads = parallelism)
+    override final lazy val executor = newCachedThreadPool(getClass.getName)
   }
 
-  object DeterministicContext extends Context {
+  /** A deterministic context with a single thread and no parallelism.
+   *
+   *  Intended for use in test cases to reduce variability.
+   *
+   *  Determinism is only guaranteed if there are no other contexts or thread pools
+   *  in use. The use of any kind of asynchronous execution implies some level of
+   *  concurrency and variability, notably if multiple deterministic contexts
+   *  are used in conjunction.
+   *
+   *  A different deterministic context should be used for every parallel operation
+   *  (stage) in a Skiis pipeline to prevent possible starvation/deadlocks.
+   */
+  class DeterministicContext extends Context {
     override final val parallelism = 1
     override final val queue = 1
     override final val batch = 1
     override final val shutdownExecutor = true
     override final lazy val executor = newFixedThreadPool(getClass.getName, threads = 1)
-  }
-
-  object DirectExecutor extends Executor {
-    def execute(r: Runnable): Unit = { r.run() }
   }
 
   class Experimental extends scala.annotation.Annotation
