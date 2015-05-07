@@ -28,8 +28,8 @@ applications.
   standard Scala collections.  It is used to convert a `Skiis[T]` to an
   arbitrary `Collection[T]`, e.g.,
 
-        records.to[IndexedSeq]  =>  IndexedSeq[T]
-        records.to[Set]         =>  Set[T]
+        skiis.to[IndexedSeq]  =>  IndexedSeq[T]
+        skiis.to[Set]         =>  Set[T]
 
 * The `parForeachAsync()` method and `Control` have been marked as
   `@Experimental` to set expectations and prevent premature production use.
