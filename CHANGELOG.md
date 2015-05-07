@@ -2,16 +2,16 @@
 2.0.0 (2015-05-01)
 
 Version 2 introduces many backward-incompatible changes and the package name
-was changed from "skiis" to "skiis2" to allow both v1/v2 to coexist in
+was changed from `skiis` to `skiis2` to allow both v1/v2 to coexist in
 applications.
 
-* The Skiis.Context is now explicit to all parallel operations.
+* The `Skiis.Context` is now explicit to all parallel operations.
 
   This is to avoid the case where the same context is used in several
   parallel operations without realizing, which can lead to issues of
   starvation and deadlock.
 
-  The recommended practice is to use different Skiis.Context for all
+  The recommended practice is to use different `Skiis.Context` for all
   parallel operations that are combined together, and of course tailoring
   queuing, batch and parallelism parameters to each stage.
 
@@ -25,18 +25,19 @@ applications.
   (of explicitly specified size) for consumption by the next stage.
 
 * A new method `to[Collection]` was added which behaves the same as
-  standard Scala collections.  It is used to convert a Skiis[T] to an
+  standard Scala collections.  It is used to convert a `Skiis[T]` to an
   arbitrary `Collection[T]`, e.g.,
 
-    records.to[IndexedSeq]
-    records.to[Set]
+        records.to[IndexedSeq]  =>  IndexedSeq[T]
+        records.to[Set]         =>  Set[T]
 
 * The `parForeachAsync()` method and `Control` have been marked as
   `@Experimental` to set expectations and prevent premature production use.
 
-* A new method `Skiis.newCachedThreadPool(name)` was introduced for convenience.
+* A new method `Skiis.newCachedThreadPool(name)` was introduced for convenience,
+  which, similarly to `newFixedThreadPool`, creates named daemond threads.
 
-* `Skiis.Context` has a new method 'shutdown(now: Boolean)' to conditionally
+* `Skiis.Context` has a new method `shutdown(now: Boolean)` to conditionally
   shutdown its executor, and a corresponding abstract field `shutdownExecutor`
   was added.
 
