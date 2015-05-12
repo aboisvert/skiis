@@ -776,6 +776,9 @@ object Skiis {
   /** Internal thread pool used to dispatch code submitted through async() method */
   private[skiis2] lazy val cachedThreadPool = newCachedThreadPool("Skiis")
 
+  /** A simple execution context to be used only for retrieving Future results from
+   *  Skiis.async()
+   */
   lazy val executionContext = new ExecutionContext {
     override def execute(runnable: Runnable): Unit = cachedThreadPool.submit(runnable)
     override def reportFailure(t: Throwable): Unit = t.printStackTrace()
