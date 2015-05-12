@@ -271,7 +271,7 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
         .map { skii => Skiis.async { Try { skii.parPull(context).to[Set] shouldBe set } } }
         .to[Seq];
 
-      futures foreach { f => f.get() shouldBe Success(()) }
+      futures foreach { f => f.onComplete { x => x shouldBe Success(()) }(Skiis.executionContext) }
 
     }
 
@@ -341,6 +341,17 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
         .sum
       total shouldBe 10000
       result shouldBe 20000
+    }
+
+    "async success" in {
+      val future = Skiis.async { 1 }
+      future.onComplete { case Success(x) => x shouldBe 1 }(Skiis.executionContext)
+    }
+
+    "async failure" in {
+      val exception = new RuntimeException("foo")
+      val future = Skiis.async { throw exception; 1 }
+      future.onComplete { case Failure(x) => x shouldBe exception }(Skiis.executionContext)
     }
   }
 
