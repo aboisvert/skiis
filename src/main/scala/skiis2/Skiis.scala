@@ -3,10 +3,12 @@ package skiis2
 import java.util.concurrent._
 import java.util.concurrent.atomic._
 import java.util.concurrent.locks._
+
 import scala.annotation.tailrec
 import scala.annotation.unchecked.uncheckedVariance
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.generic.CanBuildFrom
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
 /** "Parallel Skiis"
  *
@@ -774,6 +776,12 @@ object Skiis {
   /** Internal thread pool used to dispatch code submitted through async() method */
   private[skiis2] lazy val cachedThreadPool = newCachedThreadPool("Skiis")
 
+  lazy val executionContext = new ExecutionContext {
+    override def execute(runnable: Runnable): Unit = cachedThreadPool.submit(runnable)
+    override def reportFailure(t: Throwable): Unit = t.printStackTrace()
+    override def prepare(): ExecutionContext = this
+  }
+
    /** Abstracts over the implementation details of processing elements,
     *  possibly through a chain of operations, including batching and such.
     *
@@ -989,12 +997,19 @@ object Skiis {
   }
 
   /** Runs some computation `f` in a new (daemon) thread and return the thread */
-  def async[T](f: => T): java.util.concurrent.Future[T] = {
-    val callable = new Callable[T] { override def call() =
-      try f
-      catch { case t: Throwable => t.printStackTrace(); throw t }
+  def async[T](f: => T): Future[T] = {
+    val p = Promise[T]()
+    val runnable = new Runnable {
+      override def run() = {
+        try {
+          p.success(f)
+        } catch { case t: Throwable =>
+          p.failure(t)
+        }
+      }
     }
-    cachedThreadPool.submit(callable)
+    cachedThreadPool.execute(runnable)
+    p.future
   }
 
   /** Runs some computation `f` in a new (daemon) thread and return the thread */
