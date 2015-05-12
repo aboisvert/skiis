@@ -29,7 +29,8 @@ view) than the standard Scala {serial, parallel} collections,
   pull-based streaming architecture.
 
 * Pluggable execution context -- you can easily plug your own `Executor`
-  (thread pool) and/or use a different `Executor` for different parallel operations.  (Note this deficiency only applies to Scala 2.9.x since 2.10.0
+  (thread pool) and/or use a different `Executor` for different parallel operations.
+  (Note this deficiency only applies to Scala 2.9.x since 2.10.0
   introduced pluggable contexts).
 
 * Beyond pluging-in your own `Executor`, you can also control the level of
@@ -40,8 +41,9 @@ view) than the standard Scala {serial, parallel} collections,
   with other tasks (whether they use `Skiis` or not).
 
 * `Skiis[T]` exposes a `Control` trait that supports cancellation.
+  (This feature is currently experimental.)
 
-See `CHANGELOG` for evolution details.
+See `CHANGELOG.md` for evolution details.
 
 ### Performance ###
 
@@ -65,72 +67,79 @@ and you can then interactively try the Skiis[T] collections,
     Type in expressions to have them evaluated.
     Type :help for more information.
 
-    scala> import skiis.Skiis
+    scala> import skiis2.Skiis
+
+    // Define a timing function
+    scala> def ptime[A](f: => A) = {
+         |   val start = System.nanoTime
+         |   val result = f
+         |   printf("Elapsed: %.3f sec\n", (System.nanoTime - start) * 1e-9)
+         |   result
+         | }
+    ptime: [A](f: => A)A
 
     // Stream fusion
 
-    scala> Skiis(1 to 10) map (_ * 2) filter (_ % 2 == 0)
-    res1: skiis.Skiis[Int] = skiis.Skiis$$anon$11@456e5841
-
-    scala> res1.toIterator.toList
-    res4: List[Int] = List(4, 6, 8, 10, 12, 14, 16, 18, 20)
+    scala> ptime {
+         |   Skiis(1 to 20)
+         |     .map (_ * 3)
+         |     .filter (_ % 2 == 0)
+         |     .to[List]
+         | }
+    Elapsed: 0.001 sec
+    res1: List[Int] = List(6, 12, 18, 24, 30, 36, 42, 48, 54, 60)
 
     // Parallel operations
     // (note unordered nature of the output)
 
-    scala> implicit val context = Skiis.DefaultContext
-    context: skiis.Skiis.DefaultContext.type = skiis.Skiis$DefaultContext$@49b7bb1f
-
-    scala> Skiis(1 to 10) parMap (_ * 2) parFilter (_ % 2 == 0)
-    res1: skiis.Skiis[Int] = skiis.Skiis$$anon$3@6a39f22c
-
-    scala> res1.toIterator.toList
-    res2: List[Int] = List(6, 12, 16, 18, 20, 4, 14, 2, 8, 10)
+    scala> Skiis(1 to 20)
+             .parMap (_ * 3) (DefaultContext)
+             .parFilter (_ % 2 == 0) (DefaultContext)
+             .to[List]
+    res3: List[Int] = List(6, 12, 18, 24, 30, 36, 42, 48, 54, 60)
 
     // You can mix & match non-parallel and parallel operations
     // Here the last parallel operation (reduce) "pulls" elements from
     // previous operations in parallel.
 
-    scala> Skiis(1 to 100000) map (_ * 2) filter (_ % 2 == 0) parReduce (_ + _)
-    res1: Int = 1410165408
-    (Elapsed 62ms)
+    scala> ptime {
+     |   Skiis(1 to 20)
+     |     .parMap (_ * 3) (DefaultContext)
+     |     .parFilter (_ % 2 == 0) (DefaultContext)
+     |    .to[List]
+     | }
+     Elapsed: 0.003 sec
+     res4: List[Int] = List(6, 12, 18, 24, 30, 36, 42, 48, 54, 60)
+
 
     // compared to Scala parallel collection (we're in the same ballpark)
 
-    scala> (1 to 100000).par map (_ * 2) filter (_ % 2 == 0) reduce (_ + _)
-    res1: Int = 1410165408
-    (Elapsed 54ms)
+    scala> ptime {
+         | Skiis(1 to 100000)
+         |   .map (_ * 3)
+         |   .filter (_ % 21 == 0)
+         |   .parReduce (_ + _)(DefaultContext)
+         | }
+    Elapsed: 0.064 sec
+    res5: Int = 2142792855
 
     // compared to Scala "serial" collections
     // (all parallel collections have some overhead)
 
-    scala> (1 to 100000) map (_ * 2) filter (_ % 2 == 0) reduce (_ + _)
-    res1: Int = 1410165408
-    (Elapsed 27ms)
-
-    // configure a different context
-
-    scala> implicit val context = new Skiis.Context {
-      val executor = Executors.newFixedThreadPool(5)
-      val parallelism = 10
-      val queue = 10000
-      val batch = 100
-    }
-
-    // timing function (handy for interactive testing)
-
-    scala> def time[T](f: => T) = {
-      val start = System.currentTimeMillis
-      val result = f
-      val stop = System.currentTimeMillis
-      println("Elapsed: " + (stop-start) + "ms")
-      result
-    }
+    scala> ptime {
+         | (1 to 100000)
+         |   .map (_ * 3)
+         |   .filter (_ % 21 == 0)
+         |   .reduce (_ + _)
+         | }
+    Elapsed: 0.021 sec
+    res71: Int = 2142792855
 
 ### Caveats ###
 
-* Skiis do not implement equals() or hashCode().  If you want to compare Skiis,
-  first convert them to an Iterator.   This may be supported in the future.
+* Similarly to `Iterator`, Skiis do not implement content-based equals() or hashCode().
+  If you want to compare Skiis, first convert them to a specific collection that supports
+  equality, such as `Seq`.
 
 ### Building ###
 
@@ -141,8 +150,8 @@ You need Apache Buildr 1.4.x or higher.
 
 ### Target platform ###
 
-* Scala 2.8.0+
-* JVM 1.5+
+* Scala 2.10+
+* JVM 1.6+
 
 ### License ###
 

@@ -1,4 +1,4 @@
-package skiis
+package skiis2
 
 import java.util.concurrent.Executors
 import org.scalatest.WordSpec
@@ -14,13 +14,13 @@ class ParMapSuite extends WordSpec with ShouldMatchers {
 
   "Skiis" should {
 
-    for (i <- 1 to 10) {
-      implicit val context = new Skiis.Context {
-        override lazy val parallelism = r.nextInt(8) + 8
-        override lazy val queue = r.nextInt(100) + 1
-        override lazy val batch = r.nextInt(10) + 1
-        override lazy val executor = Skiis.newFixedThreadPool("ParMapSuite", threads = parallelism + 1)
-      }
+    val tortureLevel = Option(System.getenv("TORTURE")) map (_.toInt) getOrElse 1
+    for (i <- 1 to tortureLevel) {
+      val context = Skiis.newContext("ParMapSuite",
+          parallelism = r.nextInt(8) + 8,
+          queue = r.nextInt(100) + 1,
+          batch = r.nextInt(10) + 1
+      )
 
       ("parMap %d" format i) in {
         val acc1 = new AtomicInteger()
@@ -35,11 +35,11 @@ class ParMapSuite extends WordSpec with ShouldMatchers {
           Skiis(b)
         }
 
-        val skiis = skiis1 parMap { case (x1, x2) =>
+        val skiis = skiis1.parMap { case (x1, x2) =>
           acc2.incrementAndGet()
           Thread.sleep(r.nextInt(50))
           (x1, x2, x1)
-        }
+        }(context)
 
         skiis foreach { case (x1, x2, x3) =>
           x2 should be === (x1 + 1)
@@ -55,11 +55,11 @@ class ParMapSuite extends WordSpec with ShouldMatchers {
       }
 
       ("parFlatMap %d" format i) in {
-        val skiis = Skiis(1 to 1000) parFlatMap { i =>
+        val skiis = Skiis(1 to 1000).parFlatMap { i =>
           Thread.sleep(r.nextInt(50))
           val len = i % 100
-          (1 to len).toSeq
-        }
+          Skiis(1 to len)
+        }(context)
         skiis.force().sum should be === 1666500
       }
     }
