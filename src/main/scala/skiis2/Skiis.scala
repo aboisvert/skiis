@@ -283,11 +283,11 @@ trait Skiis[+T] extends { self =>
   def parFlatMap[U](f: T => Skiis[U])(context: Context): Skiis[U] = this.flatMap(f).parPull(context)
 
   /** This is an optimized/procedural version of parFlatMap() where the `proc` produces directly to a queue. */
-  def parMapWithQueue[U](proc: (Queue[U], T) => Unit)(context: Context): Queue[U] = {
+  def parMapWithQueue[U](proc: (T, Queue[U]) => Unit)(context: Context): Queue[U] = {
     val queue = new Queue[U](context.queue)
     Skiis.async {
       try {
-        this.parForeach { proc(queue, _) }(context)
+        this.parForeach { proc(_, queue) }(context)
         queue.close()
       } catch { case t: Throwable =>
         queue.reportException(t)

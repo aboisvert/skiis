@@ -99,6 +99,11 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       mapped.toIterator.toSet should be === Set(2, 4, 6, 8, 10, 12, 14, 16, 18, 20)
     }
 
+    "parMapWithQueue" in {
+      val mapped = Skiis(1 to 10).parMapWithQueue[Int] { (x, q) => q += x * 2 }(context)
+      mapped.toIterator.toSet should be === Set(2, 4, 6, 8, 10, 12, 14, 16, 18, 20)
+    }
+
     "parFlatMap" in {
       val acc = new java.util.concurrent.atomic.AtomicInteger()
       val mapped = Skiis(Seq.fill(100000)(1)).parFlatMap { i => acc.incrementAndGet(); Skiis(i, i+1) }(context)
