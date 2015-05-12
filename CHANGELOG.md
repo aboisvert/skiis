@@ -1,14 +1,14 @@
 
-2.0.0 (2015-05-01)
+# Version 2.0.0 (2015-05-01)
 
-Version 2 introduces many backward-incompatible changes and the package name
-was changed from `skiis` to `skiis2` to allow both v1/v2 to coexist in
-applications.
+Version 2 introduces several backward-incompatible changes and as a result
+the package name was changed from `skiis` to `skiis2` to allow both v1/v2 to
+coexist in applications.
 
 * The `Skiis.Context` is now explicit to all parallel operations.
 
-  This is to avoid the case where the same context is used in several
-  parallel operations without realizing, which can lead to issues of
+  This is to avoid a common pitfall where the same context is used in several
+  parallel operations without realizing it, which can lead to issues of
   starvation and deadlock.
 
   The recommended practice is to use different `Skiis.Context` for all
@@ -31,7 +31,11 @@ applications.
         skiis.to[IndexedSeq]  =>  IndexedSeq[T]
         skiis.to[Set]         =>  Set[T]
 
-* The `parForeachAsync()` method and `Control` have been marked as
+* A new method `serialize()` can be used to force serialized (no parallelism,
+  no concurrency) execution of any preceeding computation up to the preceeding
+  stage.
+
+* The `parForeachAsync()` method and `Control` trait have been marked as
   `@Experimental` to set expectations and prevent premature production use.
 
 * A new method `Skiis.newCachedThreadPool(name)` was introduced for convenience,
@@ -65,7 +69,22 @@ applications.
   prevent reuse in multiple stages of a Skiis pipeline.   Its scaladoc was
   updated with warnings and disclaimers for the unsuspecting programmer.
 
- 
+* A new method `parFold()` provides the ability to fold a `Skiis[T]` in parallel
+  by using as many folding values as `context.parallelism` indicates.
+
+* A new method `parFoldMap()` provides a combination of parallel fold and flatMap.
+  It encodes a common pattern where a `Skiis[T]` is processed concurrently in a
+  stateful manner and yields another `Skiis[U]`.  Since the states may reference or
+  carry resources, `parFoldMap(()` supports init/dispose blocks.
+
+* New methods `parMapWithQueue()` and `parFoldWithQueue()` are optimized versions
+  of `parFlatMap()` and `parFoldMap()` where the supplied functions (procedures)
+  must directly produce to the result queue instead of yielding values.
+
+* A new method `fanout(queues: Int, queueSize: Int): IndexedSeq[Queue[T]]` can
+  be used to replicate a `Skiis[T]` and create a fan-out pattern by replicating each
+  element in multiple fan-out queues.
+
 For changes prior to V2, please see `CHANGELOG-v1.md`.
 
 
