@@ -48,6 +48,10 @@ coexist in applications.
 * A new convenience method `Context.submit(f: => T)` was added to easily submit
   asynchronous jobs into a Context's thread pool.
 
+* A new convenience method `Skiis.submit(f: => T)` was added to easily submit
+  asynchronous jobs into Skiis' internal cached thread pool and returns 
+  a Scala `Future[T]`.
+
 * A new `copy()` method was added to `Skiis.Context` and behaves as a case-class
   copy constructor.
 
@@ -84,6 +88,9 @@ coexist in applications.
 * A new method `fanout(queues: Int, queueSize: Int): IndexedSeq[Queue[T]]` can
   be used to replicate a `Skiis[T]` and create a fan-out pattern by replicating each
   element in multiple fan-out queues.
+
+* `Skiis.Queue[T]` now provides `cancel()` and `reportException()` methods to
+  cancel or fail dependent computations.
 
 For changes prior to V2, please see `CHANGELOG-v1.md`.
 
