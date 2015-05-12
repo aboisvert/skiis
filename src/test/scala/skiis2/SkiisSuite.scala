@@ -6,13 +6,18 @@ import org.scalatest.WordSpec
 import org.scalatest.matchers.ShouldMatchers
 
 import scala.collection._
+import scala.util._
 
 @org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
 class SkiisSuite extends WordSpec with ShouldMatchers {
   import Skiis._
 
+  val rnd = new java.util.Random()
+  def random(x: Int) = math.abs(rnd.nextInt % x)
+
+
   "Skiis" should {
-    val context = Skiis.DefaultContext
+    val context = Skiis.DefaultContext copy (parallelism = 20)
 
     "map" in {
       val mapped = Skiis(1 to 10) map (_ * 2)
@@ -218,19 +223,6 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       reduced should be === 200000
     }
 
-    /*
-    "parFold" in {
-      val acc = new java.util.concurrent.atomic.AtomicInteger()
-      val total = Skiis(Seq.fill(100000)(1)).parFold(0L) { (i, total) =>
-        // println("i %d total %d" format (i, total))
-        acc.incrementAndGet();
-        i + total
-      }
-      acc.get should be === 100000
-      total should be === 100000
-    }
-    */
-
     "zip" in {
       locally {
         // left side termination
@@ -266,6 +258,60 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
        (Skiis(1, 2, 3) merge Skiis(4, 5)).to[List] should be === List(1,4,2,5,3)
     }
 
+    "fanout" in {
+      val set = (1 to 10000).toSet
+      val skiis = Skiis(set) fanout (queues = 3, queueSize = 1)
+
+      val futures = skiis
+        .map { skii => Skiis.async { Try { skii.parPull(context).to[Set] shouldBe set } } }
+        .to[Seq];
+
+      futures foreach { f => f.get() shouldBe Success(()) }
+
+    }
+
+    "parFold" in {
+      val context = Skiis.newContext(name = "parFold", parallelism = 5)
+      val result = Skiis(1 to 100)
+        .parFold { i => (i, 0) }
+                 { case ((index, total), x) => (index, total + x) }(context)
+        .to[Seq]
+
+      val indexes = result map (_._1)
+      val totals = result map (_._2)
+
+      indexes.toSet shouldBe (1 to 5).toSet
+      totals.sum shouldBe (1 to 100).sum
+    }
+
+    "parFoldWithQueue" in {
+      val fixtures = new FoldMapFixtures
+      import fixtures._
+
+      val context = Skiis.newContext(name = "parFoldWithQueue", parallelism = 5)
+      val result = Skiis(1 to 100)
+        .parFoldWithQueue[State, Int]
+            /* init */    { i => init(i) }
+            /* foldWithQueue */ { (i, x, q) => expectInit(i); yieldRandom() foreach { q += }; updateInit(i) }
+            /* dispose */ { (i, q) => disposeInit(i); yieldRandom() foreach { q += } } (context)
+        .to[Seq]
+      assertFold(result)
+    }
+
+    "parFoldMap" in {
+      val fixtures = new FoldMapFixtures
+      import fixtures._
+
+      val context = Skiis.newContext(name = "inject", parallelism = 5)
+      val result = Skiis(1 to 10)
+        .parFoldMap
+            /* init */    { i => init(i) }
+            /* foldMap */ { case (i, x) => expectInit(i); (updateInit(i), yieldRandom()) }
+            /* dispose */ { i => disposeInit(i); yieldRandom() } (context)
+        .to[Seq]
+      assertFold(result)
+    }
+
     "run previous computations seriallly when using `serialize`" in {
       var total = 0
       val result = Skiis(1 to 10000)
@@ -290,6 +336,53 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
         .sum
       total shouldBe 10000
       result shouldBe 20000
+    }
+  }
+
+  class FoldMapFixtures {
+    val inited   = mutable.Map[Int, State]()
+    val yielded  = mutable.ArrayBuffer[Int]()
+    val folded   = mutable.ArrayBuffer[Int]()
+    val disposed = mutable.ArrayBuffer[Int]()
+
+    case class State(index: Int, var value: Int)
+
+    def init(i: Int) = synchronized {
+      val value = State(i, 0)
+      inited(i) = value
+      value
+    }
+
+    def expectInit(actual: State) = synchronized {
+      actual shouldBe inited(actual.index)
+    }
+
+    def updateInit(current: State) = synchronized {
+      val newValue = State(current.index, current.value + 1)
+      inited(current.index) = newValue
+      newValue
+    }
+
+    def disposeInit(s: State) = synchronized {
+      disposed += s.index
+    }
+
+    def randomFlatMap(): Seq[Int] = {
+      val len = random(5)
+      for (i <- 1 to len) yield random(100)
+    }
+
+    def yieldRandom() = synchronized {
+      val values = randomFlatMap()
+      yielded ++= values
+      values
+    }
+
+    def assertFold(actual: Seq[Int]) = synchronized {
+      disposed.size shouldBe inited.to[Seq].size
+      disposed.sorted shouldBe inited.keys.toSeq.sorted
+      actual.size shouldBe yielded.size
+      actual.sorted shouldBe yielded.sorted
     }
   }
 }

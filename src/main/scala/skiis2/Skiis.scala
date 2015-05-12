@@ -29,16 +29,19 @@ trait Skiis[+T] extends { self =>
   /** Return the next `n` elements of this collection. */
   def take(n: Int): Seq[T] = {
     val buf = new ArrayBuffer[T](n)
+    take(n, buf)
+    buf
+  }
+
+  def take[TT >: T](n: Int, buffer: ArrayBuffer[TT]): Unit = {
+    buffer.clear()
     var i = 0
     while (i < n) {
       val n = next()
-      if (n.isEmpty) {
-        return buf
-      }
-      buf += n.get
+      if (n.isEmpty) return
+      buffer += n.get
       i += 1
     }
-    buf
   }
 
   /** Return elements while `f` predicate is satisfied. */
@@ -205,7 +208,7 @@ trait Skiis[+T] extends { self =>
    */
   def pull(queueSize: Int): Skiis[T] = {
     val queue = new Queue[T](queueSize)
-    Skiis.async("pull") {
+    Skiis.async {
       this foreach { queue += _ }
       queue.close()
     }
@@ -278,6 +281,20 @@ trait Skiis[+T] extends { self =>
    *  concatenating all the outputs.
    */
   def parFlatMap[U](f: T => Skiis[U])(context: Context): Skiis[U] = this.flatMap(f).parPull(context)
+
+  /** This is an optimized/procedural version of parFlatMap() where the `proc` produces directly to a queue. */
+  def parMapWithQueue[U](proc: (Queue[U], T) => Unit)(context: Context): Queue[U] = {
+    val queue = new Queue[U](context.queue)
+    Skiis.async {
+      try {
+        this.parForeach { proc(queue, _) }(context)
+        queue.close()
+      } catch { case t: Throwable =>
+        queue.reportException(t)
+      }
+    }
+    queue
+  }
 
   /** Selects (in parallel) all elements of this collection which satisfy a predicate. */
   def parFilter(f: T => Boolean)(context: Context): Skiis[T] = this.filter(f).parPull(context)
@@ -359,18 +376,109 @@ trait Skiis[+T] extends { self =>
     Skiis.merge(this, other)
   }
 
-  def fork(queueSize: Int = 1): (Skiis[T], Skiis[T]) = {
-    val queue1 = new Queue[T](1)
-    val queue2 = new Queue[T](1)
-    Skiis.async("fork") {
-      this foreach { x =>
-        queue1 += x
-        queue2 += x
+  /** Parallel fold.
+   *
+   *  This method generates `context.parallel` initial values using the `initial` function, then
+   *  concurrently folds all these values with values from this Skiis[T] and returns the resulting
+   *  folded values.
+   */
+  def parFold[U: Manifest](init: Int => U)(fold: (U, T) => U)(context: Context): IndexedSeq[U] = {
+    val vars = Array.tabulate(context.parallelism) { i => new Var(init(i+1)) }
+    val ring = new ConcurrentRing(vars)
+    (ring zip this).parForeach { case (v, t) =>
+      v.synchronized { v.value = fold(v.value, t) }
+    }(context)
+    vars map (_.value)
+  }
+
+  /** Combination of parallel fold and flatMap used to carry stateful computations yielding values.
+   *
+   *  This method generates `context.parallel` initial values using the `initial` function, then
+   *  concurrently folds all these values with values from this Skiis[T] and returns the resulting
+   *  folded values.
+   */
+  def parFoldMap[U, V](init: Int => U)(foldMap: (U, T) => (U, Seq[V]))(dispose: U => Seq[V])(context: Context): Skiis[V] = {
+    val queue = new Queue[V](context.queue)
+    Skiis.async {
+      val vars = try {
+        Array.tabulate(context.parallelism) { i => new Var(init(i+1)) }
+      } catch { case e: Exception =>
+        queue.reportException(e);
+        throw e
       }
-      queue1.close()
-      queue2.close()
+      def disposeVars() = {
+        Skiis(vars.iterator).parForeach { v =>
+          val flatMapped = dispose(v.value)
+          flatMapped foreach { queue += _ }
+        }(context)
+      }
+      val ring = new ConcurrentRing(vars)
+      try {
+        (ring zip this).parForeach { case (v, t) =>
+          val (newVar, flatMapped) = foldMap(v.value, t)
+          v.value = newVar
+          flatMapped foreach { queue += _ }
+        } (context)
+        disposeVars()
+        queue.close()
+      } catch { case t: Throwable =>
+        queue.reportException(t)
+        try { disposeVars() } catch { case e: Exception => e.printStackTrace() }
+      }
     }
-    (queue1, queue2)
+    queue
+  }
+
+  /** Combination of parallel fold and flatMap.
+   *
+   *  This method generates `context.parallel` initial values using the `initial` function, then
+   *  concurrently folds all these values with values from this Skiis[T] and returns the resulting
+   *  folded values.
+   */
+  def parFoldWithQueue[U, V](init: Int => U)(foldWithQueue: (U, T, Queue[V]) => U)(dispose: (U, Queue[V]) => Unit)(context: Context): Queue[V] = {
+    val queue = new Queue[V](context.queue)
+    Skiis.async {
+      val vars = try {
+        Array.tabulate(context.parallelism) { i => new Var(init(i+1)) }
+      } catch { case e: Exception =>
+        queue.reportException(e);
+        throw e
+      }
+      def disposeVars() = {
+        Skiis(vars.iterator).parForeach { v => dispose(v.value, queue) }(context)
+      }
+      val ring = new ConcurrentRing(vars)
+      try {
+        (ring zip this).parForeach { case (v, t) =>
+          v.synchronized {
+            val newVar = foldWithQueue(v.value, t, queue)
+            v.value = newVar
+          }
+        } (context)
+        vars foreach { v => dispose(v.value, queue) }
+        queue.close()
+      } catch { case t: Throwable =>
+        queue.reportException(t)
+        try { disposeVars() } catch { case e: Exception => e.printStackTrace() }
+      }
+    }
+    queue
+  }
+
+  /** Fan-out this Skiis[T] into multiple queues by replicating each element to each fan-out queue. */
+  def fanout[TT >: T](queues: Int, queueSize: Int = 1): IndexedSeq[Queue[TT]] = {
+    val qq = for (i <- 1 to queues) yield new Queue[TT](queueSize)
+    Skiis.async {
+      this foreach { x =>
+        var i = 0
+        while (i < queues) {
+          qq(i) += x
+          i += 1
+        }
+      }
+      for (q <- qq) q.close()
+    }
+    qq
   }
 
   /** Concatenate elements from another Skiis[T].
@@ -388,6 +496,8 @@ trait Skiis[+T] extends { self =>
       other.next()
     }
   }
+
+  private[Skiis] class Var[T](var value: T)
 
   /** Job holds completion status and computation output */
   private[Skiis] abstract class Job[U](val context: Context) extends Control { job =>
@@ -492,22 +602,37 @@ trait Skiis[+T] extends { self =>
     }
 
     private class Worker(val batch: Int) extends Runnable {
+      private[this] val buffer: ArrayBuffer[T] = {
+        if (batch > 1) new ArrayBuffer[T](batch) else null
+      }
       def run: Unit = {
         try {
-          bailOutIfNecessary()
-          val next = Skiis.this.take(batch)
-          if (next.size < batch) {
-            lock.lock()
-            try {
-              noMore = true
-              notifyPossiblyNoMore()
-            } finally {
-              lock.unlock()
+          while (true) {
+            bailOutIfNecessary()
+            val shouldNotify = if (batch == 1) {
+              val next = Skiis.this.next()
+              if (next.isDefined) process(next.get)
+              next.isEmpty
+            } else {
+              val next = Skiis.this.take(batch, buffer)
+              val size = buffer.size
+              var i = 0
+              while (i < size) {
+                process(buffer(i))
+                i += 1
+              }
+              size < batch
             }
-          }
-          val iter = next.iterator
-          while (iter.hasNext) {
-            process(iter.next)
+            if (shouldNotify) {
+              lock.lock()
+              try {
+                noMore = true
+                notifyPossiblyNoMore()
+              } finally {
+                lock.unlock()
+              }
+              return
+            }
           }
         } catch {
           case ex: Throwable => job.reportException(ex)
@@ -525,7 +650,7 @@ trait Skiis[+T] extends { self =>
 
     protected final def enqueue(output: U): Unit = {
       results.put(Some(output))
-      available.signal()
+      available.signalAll()
     }
 
     protected final def enqueue(outputs: Seq[U]): Unit = {
@@ -582,26 +707,26 @@ trait Skiis[+T] extends { self =>
    *
    *  The ring only supports removal and will return `null` when the ring becomes empty.
    */
-  private[Skiis] class ConcurrentRing[T: ClassManifest](ts: Seq[T]) {
-    private[this] val ref = new AtomicReference(ts.toArray)
+  private[Skiis] class ConcurrentRing[T](ts: Seq[T]) extends Skiis[T] {
+    private[this] val ref = new AtomicReference(ts.toArray[Any] map { x => Some(x) })
     private[this] val index = new AtomicInteger()
 
     /** Get next element in ring order (subject to concurrency non-determinism)
      *  or `null` if the ring is empty.
      */
-    def next(): T = {
+    def next(): Option[T] = {
       val array = ref.get
-      if (array.length == 0) return null.asInstanceOf[T]
+      if (array.length == 0) return None
       val i = math.abs(index.getAndIncrement % array.length)
-      array(i)
+      array(i).asInstanceOf[Option[T]]
     }
 
     /** Remove element `t` from the ring */
     def remove(t: T): Unit = synchronized {
       val oldArray = ref.get
-      val i = oldArray.indexOf(t)
+      val i = oldArray.indexOf(Some(t))
       if (i == -1) return
-      val newArray = new Array[T](oldArray.length - 1)
+      val newArray = new Array[Some[Any]](oldArray.length - 1)
       System.arraycopy(oldArray, 0, newArray, 0, i)
       if (newArray.length > i) {
         System.arraycopy(oldArray, i + 1, newArray, i, newArray.length - i)
@@ -632,15 +757,6 @@ trait Skiis[+T] extends { self =>
       }
     }
 
-    def signal() = {
-      lock.lock()
-      try {
-        condition.signal()
-      } finally {
-        lock.unlock()
-      }
-    }
-
     def signalAll() = {
       lock.lock()
       try {
@@ -654,6 +770,9 @@ trait Skiis[+T] extends { self =>
 }
 
 object Skiis {
+
+  /** Internal thread pool used to dispatch code submitted through async() method */
+  private[skiis2] lazy val cachedThreadPool = newCachedThreadPool("Skiis")
 
    /** Abstracts over the implementation details of processing elements,
     *  possibly through a chain of operations, including batching and such.
@@ -857,16 +976,25 @@ object Skiis {
 
     @tailrec override def next(): Option[T] = {
       val skii = ring.next()
-      if (skii == null) return None
+      if (skii == None) return None
 
-      val n = skii.next()
+      val n = skii.get.next()
       if (n.isDefined) {
         n
       } else {
-        ring.remove(skii)
+        ring.remove(skii.get)
         next()
       }
     }
+  }
+
+  /** Runs some computation `f` in a new (daemon) thread and return the thread */
+  def async[T](f: => T): java.util.concurrent.Future[T] = {
+    val callable = new Callable[T] { override def call() =
+      try f
+      catch { case t: Throwable => t.printStackTrace(); throw t }
+    }
+    cachedThreadPool.submit(callable)
   }
 
   /** Runs some computation `f` in a new (daemon) thread and return the thread */
@@ -884,17 +1012,52 @@ object Skiis {
     private[this] val queue = new LinkedBlockingQueue[T](size)
     private[this] var closed = false
     private[this] var closedImmediately = false
+    private[this] var exception: Throwable = null
+    private[this] var cancelled = false
     private[this] val lock = new ReentrantLock()
     private[this] val empty = lock.newCondition()
     private[this] val full = lock.newCondition()
 
+    def cancel() {
+      lock.lock()
+      try {
+        cancelled = true
+        empty.signalAll()
+        full.signalAll()
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    def reportException(t: Throwable) {
+      lock.lock()
+      try {
+        if (exception == null) exception = t
+        empty.signalAll()
+        full.signalAll()
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    protected def bailOutIfNecessary() {
+      lock.lock()
+      try {
+        if (exception != null) throw exception
+        if (cancelled) throw new CancellationException("Queue processing was cancelled")
+      } finally {
+        lock.unlock()
+      }
+    }
+
     def +=(t: T) {
       lock.lock()
       try {
-        while (!queue.offer(t)) {
+        while (!closedImmediately && !queue.offer(t)) {
+          bailOutIfNecessary()
           full.await()
         }
-        empty.signal()
+        empty.signalAll()
       } finally {
         lock.unlock()
       }
@@ -904,11 +1067,12 @@ object Skiis {
       lock.lock()
       try {
         for (t <- ts) {
-          while (!queue.offer(t)) {
+          while (!closedImmediately && !queue.offer(t)) {
+            bailOutIfNecessary()
             full.await()
           }
+          empty.signalAll()
         }
-        empty.signalAll()
       } finally {
         lock.unlock()
       }
@@ -917,7 +1081,13 @@ object Skiis {
     def close(immediately: Boolean = false) {
       lock.lock()
       try {
-        if (immediately) closedImmediately = true else closed = true
+        if (immediately) {
+          closedImmediately = true
+          queue.clear()
+        } else {
+          closed = true
+        }
+        full.signalAll()
         empty.signalAll()
       } finally {
         lock.unlock()
@@ -927,18 +1097,18 @@ object Skiis {
     override def next(): Option[T] = {
       lock.lock()
       try {
-        while (true) {
-          if (closedImmediately) return None
+        while (!closedImmediately) {
+          bailOutIfNecessary()
           val n = queue.poll()
           if (n != null) {
-            full.signal()
+            full.signalAll()
             return Some(n)
           } else {
             if (closed) return None
             empty.await()
           }
         }
-        sys.error("unreachable")
+        None
       } finally {
         lock.unlock()
       }
@@ -946,22 +1116,25 @@ object Skiis {
 
     override def take(n: Int): Seq[T] = {
       val result = new ArrayBuffer[T](n)
+      take(n, result)
+      result
+    }
+
+    override def take[TT >: T](n: Int, buffer: ArrayBuffer[TT]): Unit = {
+      buffer.clear()
       lock.lock()
       try {
-        while (result.size < n && (queue.size > 0 || !closed)) {
-          val isFull = (queue.size == size)
+        while (buffer.size < n && !closedImmediately) {
+          bailOutIfNecessary()
           val n = queue.poll()
           if (n != null) {
-            result += n
-            if (isFull) full.signal()
+            buffer += n
+            full.signalAll()
           } else {
+            if (closed) return
             empty.await()
           }
         }
-        full.signalAll()
-        return result
-
-        sys.error("unreachable")
       } finally {
         lock.unlock()
       }

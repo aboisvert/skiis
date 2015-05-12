@@ -13,7 +13,7 @@ class ParFlatMapSuite extends WordSpec with ShouldMatchers {
   val r = new scala.util.Random // thread-safe
 
   "Skiis" should {
-     val context = Skiis.newContext("ParMapSuite", parallelism = 2, queue = 100, batch = 1)
+    val context = Skiis.newContext("ParMapSuite", parallelism = 4, queue = 100, batch = 1)
 
     def randomInt(x: Int): Int = {
       math.abs(r.nextInt % x)
@@ -24,7 +24,7 @@ class ParFlatMapSuite extends WordSpec with ShouldMatchers {
     for (loop <- 1 to tortureLevel) {
       s"parFlatMap followed by grouped - loop $loop" in {
       val acc = new java.util.concurrent.atomic.AtomicInteger()
-      val ctx2 = context.copy(parallelism = context.parallelism - 1)
+      val ctx2 = Skiis.newContext("ParMapSuite2", parallelism = 3, queue = 10, batch = 2)
       Skiis(1 to 999)
          .parFlatMap { x =>
            if (randomInt(10) % 5 == 0) {
@@ -33,9 +33,9 @@ class ParFlatMapSuite extends WordSpec with ShouldMatchers {
            } else {
              Skiis.empty
            }
-         }(ctx2)
-       .grouped(7)
-       .parForeach { xs => xs foreach { x => acc.addAndGet(x) }; Thread.sleep(randomInt(3))   }(ctx2)
+         }(context)
+         .grouped(7)
+         .parForeach { xs => xs foreach { x => acc.addAndGet(x) }; Thread.sleep(randomInt(3))   }(ctx2)
       }
     }
   }
