@@ -353,6 +353,17 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       val future = Skiis.async { throw exception; 1 }
       future.onComplete { case Failure(x) => x shouldBe exception }(Skiis.executionContext)
     }
+
+    "execute a side-effect using `andThen`" in {
+      @volatile var executed = false
+      val total = Skiis(1 to 10000)
+        .parMap (_ + 1)(context)
+        .andThen { executed = true }
+        .to[Iterator]
+        .sum
+      total shouldBe 50015000
+      executed shouldBe true
+    }
   }
 
   class FoldMapFixtures {

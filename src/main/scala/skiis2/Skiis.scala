@@ -96,6 +96,26 @@ trait Skiis[+T] extends { self =>
     x
   }
 
+  /** Chain a side-effect, to be executed when the current Skiis has been
+   *  completely consumed.   The execution is guaranteed to happen at most once.
+   *
+   *  Note: There is no guarantee the side-effect will be evaluated at all,
+   *  since the Skiis may not ever be consumed completely.
+   */
+  def andThen(f: => Unit): Skiis[T] = {
+    val onceOnly = new Skiis[T] {
+      private[this] val atomic = new AtomicBoolean(false)
+      override def next(): Option[T] = {
+        val alreadyEvaluated = atomic.getAndSet(true)
+        if (!alreadyEvaluated) {
+          f
+        }
+        None
+      }
+    }
+    this ++ onceOnly
+  }
+
   /** Transform elements of this collection with the function `f` producing zero-or-more
    *  outputs per input element and return a new collection concatenating the outputs.
    */
@@ -488,14 +508,10 @@ trait Skiis[+T] extends { self =>
    *  e.g., Skiis(1,2,3) ++ Skiis(4,5) => Skiis(1,2,3,4,5)
    */
   def ++[TT >: T](other: Skiis[TT]): Skiis[TT] = new Skiis[TT] {
-    private var selfEmpty = false
-    override def next(): Option[TT] = synchronized {
-      if (!selfEmpty) {
-        val n = self.next()
-        if (n.isDefined) return n
-        else selfEmpty = true
-      }
-      other.next()
+    override def next(): Option[TT] = {
+      val n = self.next()
+      if (n.isEmpty) other.next()
+      else n
     }
   }
 

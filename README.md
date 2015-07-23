@@ -69,6 +69,8 @@ and you can then interactively try the Skiis[T] collections,
 
     scala> import skiis2.Skiis
 
+    scala> import skiis2.Skiis.DefaultContext
+
     // Define a timing function
     scala> def ptime[A](f: => A) = {
          |   val start = System.nanoTime
@@ -96,7 +98,7 @@ and you can then interactively try the Skiis[T] collections,
              .parMap (_ * 3) (DefaultContext)
              .parFilter (_ % 2 == 0) (DefaultContext)
              .to[List]
-    res3: List[Int] = List(6, 12, 18, 24, 30, 36, 42, 48, 54, 60)
+    res3: List[Int] = List(24, 12, 6, 18, 30, 36, 48, 42, 60, 54)
 
     // You can mix & match non-parallel and parallel operations
     // Here the last parallel operation (reduce) "pulls" elements from
@@ -104,12 +106,12 @@ and you can then interactively try the Skiis[T] collections,
 
     scala> ptime {
      |   Skiis(1 to 20)
-     |     .parMap (_ * 3) (DefaultContext)
+     |     .map (_ * 3)
      |     .parFilter (_ % 2 == 0) (DefaultContext)
      |    .to[List]
      | }
      Elapsed: 0.003 sec
-     res4: List[Int] = List(6, 12, 18, 24, 30, 36, 42, 48, 54, 60)
+     res4: List[Int] = List(18, 12, 6, 24, 36, 30, 42, 48, 54, 60)
 
 
     // compared to Scala parallel collection (we're in the same ballpark)
@@ -120,7 +122,16 @@ and you can then interactively try the Skiis[T] collections,
          |   .filter (_ % 21 == 0)
          |   .parReduce (_ + _)(DefaultContext)
          | }
-    Elapsed: 0.064 sec
+    Elapsed: 0.014 sec
+    res5: Int = 2142792855
+
+    scala> ptime {
+         | (1 to 100000).par
+         |   .map (_ * 3)
+         |   .filter (_ % 21 == 0)
+         |   .reduce (_ + _)
+         | }
+    Elapsed: 0.015 sec
     res5: Int = 2142792855
 
     // compared to Scala "serial" collections
@@ -132,7 +143,7 @@ and you can then interactively try the Skiis[T] collections,
          |   .filter (_ % 21 == 0)
          |   .reduce (_ + _)
          | }
-    Elapsed: 0.021 sec
+    Elapsed: 0.012 sec
     res71: Int = 2142792855
 
 ### Caveats ###
