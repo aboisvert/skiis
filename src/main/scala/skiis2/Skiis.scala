@@ -488,14 +488,10 @@ trait Skiis[+T] extends { self =>
    *  e.g., Skiis(1,2,3) ++ Skiis(4,5) => Skiis(1,2,3,4,5)
    */
   def ++[TT >: T](other: Skiis[TT]): Skiis[TT] = new Skiis[TT] {
-    private var selfEmpty = false
-    override def next(): Option[TT] = synchronized {
-      if (!selfEmpty) {
-        val n = self.next()
-        if (n.isDefined) return n
-        else selfEmpty = true
-      }
-      other.next()
+    override def next(): Option[TT] = {
+      val n = self.next()
+      if (n.isEmpty) other.next()
+      else n
     }
   }
 
