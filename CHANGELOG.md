@@ -1,4 +1,22 @@
 
+# Version 2.0.1 (2015-07-23)
+
+* Added method `andThen` to allow chaining a side-effect, to be executed when the
+  `Skiis` has been completely consumed.   The execution is guaranteed to happen at
+  most once.  (There is no guarantee the side-effect will be evaluated
+  at all, since the Skiis may not ever be fully consumed.)
+
+  This method is intended to support use-cases where a `Skiis` (or a derived
+  `Iterator`) is passed to some other code and cleanup/completion is needed afterwards.
+  An example might be shutting down the `Skiis.Context` executor.
+
+  Of course, this isn't the best of designs but it may be the best available option
+  in contexts where, e.g., there is no better available scoping/lifecycle structure
+  around the production/consumption of Skiis/Iterators.  Caveat emptor.
+
+* Optimization: removed an unnecessary synchronization in `Skiis.++`, the
+  Skiis concatenation operator.
+
 # Version 2.0.0 (2015-05-01)
 
 Version 2 introduces several backward-incompatible changes and as a result
@@ -49,7 +67,7 @@ coexist in applications.
   asynchronous jobs into a Context's thread pool.
 
 * A new convenience method `Skiis.submit(f: => T)` was added to easily submit
-  asynchronous jobs into Skiis' internal cached thread pool and returns 
+  asynchronous jobs into Skiis' internal cached thread pool and returns
   a Scala `Future[T]`.
 
 * A new `copy()` method was added to `Skiis.Context` and behaves as a case-class
