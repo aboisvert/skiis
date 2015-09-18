@@ -1,11 +1,10 @@
 package skiis2
 
 import java.util.concurrent.Executors
-
 import org.scalatest.WordSpec
 import org.scalatest.matchers.ShouldMatchers
-
 import scala.collection._
+import java.util.concurrent.atomic.AtomicInteger
 
 @org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
 class ParForeachSuite extends WordSpec with ShouldMatchers {
@@ -36,7 +35,7 @@ class ParForeachSuite extends WordSpec with ShouldMatchers {
     val tortureLevel = Option(System.getenv("TORTURE")) map (_.toInt) getOrElse 1
 
     for (i <- 1 to tortureLevel) {
-      ("parForeach %d" format i) in {
+      ("parForeach %d" format i) ignore {
         Skiis(1 to 10).parForeach({ s: Int =>
           for (j <- 1 to 100) {
             val n = r.nextInt(j)
@@ -48,6 +47,14 @@ class ParForeachSuite extends WordSpec with ShouldMatchers {
 
           println()
         })(big)
+      }
+
+      s"only complete when all elements are processed $i" in {
+        val sum = new AtomicInteger(0)
+        Skiis(1 to 10000).parForeach { i =>
+          sum.addAndGet(i)
+        }(big)
+        sum.get shouldBe (1 to 10000).sum
       }
     }
   }

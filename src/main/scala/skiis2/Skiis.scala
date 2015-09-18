@@ -1281,26 +1281,28 @@ object Skiis {
     private var queue: Queue[T] = null
     private var consumer: Thread = null
 
-    setupQueue() // initialize
+    rotateQueue() // initialize
 
-    private def setupQueue(): Unit = {
+    private def rotateQueue(): (Queue[T], Thread) = {
+      val oldQueue = queue
+      val oldConsumer = consumer
       queue = new Skiis.Queue[T](queueSize)
-      consumer = Skiis.async(name){ f(queue) }
+      consumer = Skiis.async(name) { f(queue) }
+      (oldQueue, oldConsumer)
     }
 
     override def +=(t: T): Unit = synchronized {
       queue += t
     }
 
-    def checkpoint(): Unit = synchronized {
-      // tell consumer we're done sending records
-      queue.close()
+    override def checkpoint(): Unit =  {
+      val (oldQueue, oldConsumer) = synchronized { rotateQueue() }
 
-      // wait until all records published
-      consumer.join()
+      // tell (old) consumer we're done sending records
+      oldQueue.close()
 
-      // reinitialize the queue
-      setupQueue()
+      // wait until all records processed
+      oldConsumer.join()
     }
   }
 }
