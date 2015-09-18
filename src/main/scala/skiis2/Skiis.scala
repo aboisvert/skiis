@@ -87,7 +87,7 @@ trait Skiis[+T] extends { self =>
     }
   }
 
-  def listen[U](f: T => Unit): Skiis[T] = map { x =>
+  def listen(f: T => Unit): Skiis[T] = map { x =>
     try {
       f(x)
     } catch {
@@ -1267,4 +1267,40 @@ object Skiis {
   }
 
   class Experimental extends scala.annotation.Annotation
+
+  trait CheckpointableQueue[T] {
+    /** Add an element to the underlying queue.  The element becomes immediately available for
+     *  parallel processing. */
+    def +=(t: T): Unit
+
+    /** Checkpoint - waits until processing has completed on all elements previously added to the queue. */
+    def checkpoint(): Unit
+  }
+
+  def newCheckpointableQueue[T](name: String, queueSize: Int)(f: Skiis[T] => Unit) = new CheckpointableQueue[T] {
+    private var queue: Queue[T] = null
+    private var consumer: Thread = null
+
+    setupQueue() // initialize
+
+    private def setupQueue(): Unit = {
+      queue = new Skiis.Queue[T](queueSize)
+      consumer = Skiis.async(name){ f(queue) }
+    }
+
+    override def +=(t: T): Unit = synchronized {
+      queue += t
+    }
+
+    def checkpoint(): Unit = synchronized {
+      // tell consumer we're done sending records
+      queue.close()
+
+      // wait until all records published
+      consumer.join()
+
+      // reinitialize the queue
+      setupQueue()
+    }
+  }
 }
