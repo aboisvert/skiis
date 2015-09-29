@@ -81,11 +81,77 @@ class SkiisSuite extends WordSpec with ShouldMatchers {
       Skiis(1 to 10).takeWhile(_ <= 11).toIterator.toSeq should be === Seq(1,2,3,4,5,6,7,8,9,10)
     }
 
+    "lookahead" in {
+      val counter = new java.util.concurrent.atomic.AtomicInteger()
+      val skiis = Skiis(Iterator.continually { counter.incrementAndGet() } ).lookahead(queue = 1)
+
+      Thread.sleep(100)
+      counter.get shouldBe 2
+      skiis.next() shouldBe Some(1)
+
+      Thread.sleep(100)
+      counter.get shouldBe 3
+      skiis.next() shouldBe Some(2)
+    }
+
     "grouped" in {
       (Skiis(1 to 3) grouped 1).toIterator.toSeq  should be === Seq(Seq(1), Seq(2), Seq(3))
       (Skiis(1 to 4) grouped 2).toIterator.toSeq  should be === Seq(Seq(1, 2), Seq(3, 4))
       (Skiis(1 to 5) grouped 2).toIterator.toSeq  should be === Seq(Seq(1, 2), Seq(3, 4), Seq(5))
       (Skiis(1 to 1000) grouped 7).toIterator.toSeq  should be === (1 to 1000 grouped 7).toSeq
+    }
+
+    def assertGroupedBy[K, V](skiis: Skiis[(K, Seq[V])], orderedHead: Seq[(K, Seq[V])], unorderedTail: Set[(K, Seq[V])]) = {
+      val seq = skiis.to[Vector]
+      seq.size shouldBe (orderedHead.size + unorderedTail.size)
+      seq.take(orderedHead.size) shouldBe orderedHead
+      seq.takeRight(unorderedTail.size).toSet shouldBe unorderedTail
+    }
+
+    "groupedBy" in {
+      assertGroupedBy(
+        Skiis(1 to 10).groupedBy(maxGroupSize = 3, maxElements = Int.MaxValue, maxPartialGroups = Int.MaxValue)(_ % 2),
+        orderedHead = Seq(
+          (1, Seq(1, 3, 5)),
+          (0, Seq(2, 4, 6))),
+        unorderedTail = Set(
+          (1, Seq(7, 9)),
+          (0, Seq(8, 10))))
+
+      assertGroupedBy(
+        Skiis(1 to 10).groupedBy(maxGroupSize = 3, maxElements = 4)(_ % 2),
+        orderedHead = Seq(
+          (1, Seq(1, 3)),
+          (0, Seq(2, 4, 6)),
+          (1, Seq(5, 7, 9))),
+        unorderedTail = Set((0, Seq(8, 10))))
+
+      assertGroupedBy(
+        Skiis(Seq(1, 1, 2, 2, 2, 3, 3, 4)).groupedBy(maxGroupSize = 3, maxElements = 3)(_ % 3),
+        orderedHead = Seq(
+          (1, Seq(1, 1)),
+          (2, Seq(2, 2, 2))),
+        unorderedTail = Set(
+          (0, Seq(3, 3)),
+          (1, Seq(4))))
+    }
+
+    "groupedBy (with maxPartialGroups)" in {
+      assertGroupedBy(
+        Skiis(Seq(1, 1, 2, 2, 2, 3, 3, 4)).groupedBy(maxGroupSize = 3, maxElements = Int.MaxValue, maxPartialGroups = 2)(_ % 3),
+        orderedHead = Seq(
+          (1, Seq(1, 1)),
+          (2, Seq(2, 2, 2))),
+        unorderedTail = Set(
+          (0, Seq(3, 3)),
+          (1, Seq(4))))
+
+      assertGroupedBy(
+        Skiis(Seq(1, 1, 2, 2, 2, 3, 3, 4)).groupedBy(maxGroupSize = 3, maxElements = Int.MaxValue, maxPartialGroups = 3)(_ % 3),
+        orderedHead = Seq(
+          (2, Seq(2, 2, 2)),
+          (1, Seq(1, 1, 4))),
+        unorderedTail = Set((0, Seq(3, 3))))
     }
 
     "parForeach" in {
