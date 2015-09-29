@@ -58,11 +58,87 @@ trait Skiis[+T] extends { self =>
     }
   }
 
+  /** "Lookahead" forces evaluation of previous computation using provided `parallelism`, `queue` and `batch` parameters.
+   *   This is a convenience function meant to provide a standard name for this recurring idiom.
+   *   It is the equivalent of parMap(identity)(new Context with `parallelism`, `queue` and `batch`)
+   */
+  def lookahead(parallelism: Int = 1, queue: Int = 1, batch: Int = 1) = {
+    val context = Skiis.newContext("Lookahead", parallelism, queue, batch)
+    parMap(identity)(context)
+  }
+
   /** Group stream into groups of `n` elements */
   def grouped(n: Int): Skiis[Seq[T]] = new Skiis[Seq[T]] {
     override def next(): Option[Seq[T]] = {
       val group = self.take(n)
       if (group.isEmpty) None else Some(group)
+    }
+  }
+
+  /** Combination of `grouped` and `groupBy` operations operating in a streaming fashion.
+   *
+   *  This method groups elements based on a key-extraction function `f`.
+   *  When a group reaches `maxGroupSize`, it is emitted.
+   *  When a cumulative `maxElements` have been retained without any group reaching `maxGroupSize`, the largest
+   *  group available will be emitted.
+   *  And finally, when `maxPartialGroups` have been formed without any reaching `maxGroupSize`, the largest
+   *  group will also be emitted.
+   */
+  def groupedBy[K](maxGroupSize: Int, maxElements: Int, maxPartialGroups: Int = Int.MaxValue)(f: T => K): Skiis[(K, Seq[T])] = new Skiis[(K, Seq[T])] {
+    private[this] val groups = scala.collection.mutable.Map[K, ArrayBuffer[T]]()
+    private[this] var partialGroups: Iterator[(K, Seq[T])] = null
+    private[this] var size = 0
+
+    override def next(): Option[(K, Seq[T])] = synchronized {
+      // if we've reach the end of the stream, return remaining partial groups
+      // (note: no need to keep track of `size` anymore)
+      if (partialGroups != null) {
+        if (partialGroups.hasNext) return Some(partialGroups.next())
+        else return None
+      }
+
+      // loop until we have something to return,
+      // this may take up to `maxElements` or `maxPartialGroups` iterations
+      while (true) {
+        val value = self.next()
+
+        // if we've reached the end of the stream, switch to returning partial group mode (if any)
+        if (value.isEmpty) {
+          partialGroups = groups.iterator
+          if (partialGroups.hasNext) return Some(partialGroups.next())
+          else return None
+        }
+
+        val key = f(value.get)
+        val values = groups.getOrElseUpdate(key, new ArrayBuffer[T](maxGroupSize)) += value.get
+        size += 1
+
+        // return full-size group, if any
+        if (values.size >= maxGroupSize) {
+          groups.remove(key)
+          size -= values.size
+          return Some((key, values))
+        }
+
+        @inline def findAndRemoveLargestGroup(): (K, Seq[T]) = {
+          val (key, values) = groups maxBy { case (key, values) => values.size }
+          groups.remove(key)
+          size -= values.size
+          (key, values)
+        }
+
+        if (size >= maxElements) {
+          return Some(findAndRemoveLargestGroup())
+        }
+
+        if (groups.size >= maxPartialGroups) {
+          return Some(findAndRemoveLargestGroup())
+        }
+
+        // else, iterate until we have something to return
+      }
+
+      sys.error("unreachable")
     }
   }
 
