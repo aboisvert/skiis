@@ -8,7 +8,8 @@ import scala.annotation.tailrec
 import scala.annotation.unchecked.uncheckedVariance
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.generic.CanBuildFrom
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
+import scala.concurrent.duration._
 
 /** "Parallel Skiis"
  *
@@ -309,7 +310,9 @@ trait Skiis[+T] extends { self =>
     Skiis.async {
       this foreach { queue += _ }
       queue.close()
-    }
+    }.onFailure({ case t: Throwable =>
+      queue.reportException(t)
+    })(ExecutionContext.Implicits.global)
     queue
   }
 
@@ -575,7 +578,9 @@ trait Skiis[+T] extends { self =>
         }
       }
       for (q <- qq) q.close()
-    }
+    }.onFailure({ case t: Throwable =>
+      for (q <- qq) q.reportException(t)
+    })(ExecutionContext.Implicits.global)
     qq
   }
 
@@ -1108,11 +1113,21 @@ object Skiis {
   }
 
   /** Runs some computation `f` in a new (daemon) thread and return the thread */
-  def async[T](name: String)(f: => T): Thread = {
-    val t = new Thread(new Runnable() { override def run() { f } }, name)
+  def async[T](name: String)(f: => T): Future[T] = {
+    val p = Promise[T]()
+    val runnable = new Runnable {
+      override def run() = {
+        try {
+          p.success(f)
+        } catch { case t: Throwable =>
+          p.failure(t)
+        }
+      }
+    }
+    val t = new Thread(runnable, name)
     t.setDaemon(true)
     t.start()
-    t
+    p.future
   }
 
   /** A Skiis[T] collection backed by a LinkedBlockingQueue[T]
@@ -1355,15 +1370,16 @@ object Skiis {
 
   def newCheckpointableQueue[T](name: String, queueSize: Int)(f: Skiis[T] => Unit) = new CheckpointableQueue[T] {
     private var queue: Queue[T] = null
-    private var consumer: Thread = null
+    private var consumer: Future[_] = null
 
     rotateQueue() // initialize
 
-    private def rotateQueue(): (Queue[T], Thread) = {
+    private def rotateQueue(): (Queue[T], Future[_]) = {
       val oldQueue = queue
       val oldConsumer = consumer
       queue = new Skiis.Queue[T](queueSize)
       consumer = Skiis.async(name) { f(queue) }
+      consumer.onFailure({ case t: Throwable => queue.reportException(t) })(ExecutionContext.Implicits.global)
       (oldQueue, oldConsumer)
     }
 
@@ -1378,7 +1394,7 @@ object Skiis {
       oldQueue.close()
 
       // wait until all records processed
-      oldConsumer.join()
+      Await.result(oldConsumer, Duration.Inf)
     }
   }
 }
