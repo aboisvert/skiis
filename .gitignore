@@ -4,3 +4,5 @@ target/
 tools/
 lib/
 *~
+.bloop
+.metals
