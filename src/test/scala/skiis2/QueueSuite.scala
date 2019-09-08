@@ -3,14 +3,14 @@ package skiis2
 import java.util.concurrent.Executors
 
 import org.scalatest.WordSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers._
 
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 import scala.language.{ postfixOps, reflectiveCalls }
 
 @org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
-class QueueSuite extends WordSpec with ShouldMatchers {
+class QueueSuite extends WordSpec {
   import Skiis._
 
   def fizzBuzz(x: Int) = (x % 3, x % 5) match {

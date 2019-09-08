@@ -3,13 +3,14 @@ package skiis2
 import java.util.concurrent.Executors
 
 import org.scalatest.WordSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers._
+
 
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 
 @org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
-class FusionSuite extends WordSpec with ShouldMatchers {
+class FusionSuite extends WordSpec {
   import Skiis._
 
   "Skiis" should {

@@ -2,7 +2,8 @@ package skiis2
 
 import java.util.concurrent.Executors
 import org.scalatest.WordSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers._
+
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 import scala.language.{ postfixOps, reflectiveCalls }
@@ -11,7 +12,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 @org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
-class CheckpointableQueueSuite extends WordSpec with ShouldMatchers {
+class CheckpointableQueueSuite extends WordSpec {
   import Skiis._
 
   "CheckpointableQueue" should {

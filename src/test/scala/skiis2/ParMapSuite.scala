@@ -2,12 +2,12 @@ package skiis2
 
 import java.util.concurrent.Executors
 import org.scalatest.WordSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers._
 import scala.collection._
 import java.util.concurrent.atomic.AtomicInteger
 
 @org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
-class ParMapSuite extends WordSpec with ShouldMatchers {
+class ParMapSuite extends WordSpec {
   import Skiis._
 
   val r = new scala.util.Random

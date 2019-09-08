@@ -3,12 +3,13 @@ package skiis2
 import java.util.concurrent.Executors
 
 import org.scalatest.WordSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers._
+
 
 import scala.collection._
 
 @org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
-class MergeSuite extends WordSpec with ShouldMatchers {
+class MergeSuite extends WordSpec {
   import Skiis._
 
   val r = new scala.util.Random
