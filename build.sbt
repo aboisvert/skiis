@@ -1,6 +1,6 @@
 name := "skiis"
 
-version := "0.1.0"
+version := "2.0.2-SNAPSHOT"
 
 organization := "org.alexboisvert"
 

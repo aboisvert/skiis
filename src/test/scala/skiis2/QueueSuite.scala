@@ -4,13 +4,10 @@ import java.util.concurrent.Executors
 
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AnyWordSpec
-import org.scalatest.matchers.should.Matchers
 
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 import scala.language.{ postfixOps, reflectiveCalls }
-
 
 class QueueSuite extends AnyWordSpec with Matchers {
   import Skiis._
