@@ -1133,10 +1133,11 @@ object Skiis {
   /** A Skiis[T] collection backed by a LinkedBlockingQueue[T]
    *  that allows "pushing" elements to consumers.
    */
-  final class Queue[T](val size: Int) extends Skiis[T] {
+  final class Queue[T](val size: Int, val maxAwaiting: Int = Int.MaxValue) extends Skiis[T] {
     private[this] val queue = new LinkedBlockingQueue[T](size)
     private[this] var closed = false
     private[this] var closedImmediately = false
+    private[this] var awaiting = 0
     private[this] var exception: Throwable = null
     private[this] var cancelled = false
     private[this] val lock = new ReentrantLock()
@@ -1230,7 +1231,15 @@ object Skiis {
             return Some(n)
           } else {
             if (closed) return None
+            awaiting += 1
+            if (awaiting == maxAwaiting) {
+              closed = true
+              empty.signalAll()
+              awaiting -= 1
+              return None
+            }
             empty.await()
+            awaiting -= 1
           }
         }
         None
@@ -1257,7 +1266,15 @@ object Skiis {
             full.signalAll()
           } else {
             if (closed) return
+            awaiting += 1
+            if (awaiting == maxAwaiting) {
+              closed = true
+              empty.signalAll()
+              awaiting -= 1
+              return
+            }
             empty.await()
+            awaiting -= 1
           }
         }
       } finally {
