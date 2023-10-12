@@ -6,7 +6,7 @@ import org.scalatest.matchers.should.Matchers
 import scala.collection._
 import java.util.concurrent.atomic.AtomicInteger
 
-//@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
+
 class ParMapSuite extends AnyWordSpec with Matchers {
   import Skiis._
 

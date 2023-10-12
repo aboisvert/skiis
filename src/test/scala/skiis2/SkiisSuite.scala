@@ -13,7 +13,7 @@ import scala.concurrent.duration.Duration
 import java.util.concurrent.TimeUnit
 import org.scalatest.Succeeded
 
-//@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
+
 class SkiisSuite extends AnyWordSpec with Matchers {
   import Skiis._
 

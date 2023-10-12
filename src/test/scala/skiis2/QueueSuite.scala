@@ -11,7 +11,7 @@ import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 import scala.language.{ postfixOps, reflectiveCalls }
 
-//@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
+
 class QueueSuite extends AnyWordSpec with Matchers {
   import Skiis._
 
