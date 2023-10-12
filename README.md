@@ -86,7 +86,7 @@ and you can then interactively try the Skiis[T] collections,
          |   Skiis(1 to 20)
          |     .map (_ * 3)
          |     .filter (_ % 2 == 0)
-         |     .to[List]
+         |     to(List)
          | }
     Elapsed: 0.001 sec
     res1: List[Int] = List(6, 12, 18, 24, 30, 36, 42, 48, 54, 60)
@@ -97,7 +97,7 @@ and you can then interactively try the Skiis[T] collections,
     scala> Skiis(1 to 20)
              .parMap (_ * 3) (DefaultContext)
              .parFilter (_ % 2 == 0) (DefaultContext)
-             .to[List]
+             to(List)
     res3: List[Int] = List(24, 12, 6, 18, 30, 36, 48, 42, 60, 54)
 
     // You can mix & match non-parallel and parallel operations
@@ -108,7 +108,7 @@ and you can then interactively try the Skiis[T] collections,
      |   Skiis(1 to 20)
      |     .map (_ * 3)
      |     .parFilter (_ % 2 == 0) (DefaultContext)
-     |    .to[List]
+     |    to(List)
      | }
      Elapsed: 0.003 sec
      res4: List[Int] = List(18, 12, 6, 24, 36, 30, 42, 48, 54, 60)

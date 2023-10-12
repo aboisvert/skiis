@@ -47,7 +47,7 @@ coexist in applications.
   arbitrary `Collection[T]`, e.g.,
 
         skiis.to[IndexedSeq]  =>  IndexedSeq[T]
-        skiis.to[Set]         =>  Set[T]
+        skiis.to(Set)         =>  Set[T]
 
 * A new method `serialize()` can be used to force serialized (no parallelism,
   no concurrency) execution of any preceeding computation up to the preceeding

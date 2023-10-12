@@ -2,15 +2,17 @@ package skiis2
 
 import java.util.concurrent.Executors
 
-import org.scalatest.WordSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 import scala.language.{ postfixOps, reflectiveCalls }
 
-@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
-class QueueSuite extends WordSpec with ShouldMatchers {
+//@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
+class QueueSuite extends AnyWordSpec with Matchers {
   import Skiis._
 
   def fizzBuzz(x: Int) = (x % 3, x % 5) match {
@@ -49,9 +51,9 @@ class QueueSuite extends WordSpec with ShouldMatchers {
 
       c.waitUntilCompleted()
       c.synchronized {
-        c.started should be === true
-        c.elements.size should be === 100
-        c.completed should be === true
+        c.started should === (true)
+        c.elements.size should === (100)
+        c.completed should === (true)
       }
     }
 
@@ -70,9 +72,9 @@ class QueueSuite extends WordSpec with ShouldMatchers {
 
         c.waitUntilCompleted()
         c.synchronized {
-          c.started should be === true
-          c.elements.size should be === 100
-          c.completed should be === true
+          c.started should === (true)
+          c.elements.size should === (100)
+          c.completed should === (true)
         }
       }
     }
@@ -84,7 +86,7 @@ class QueueSuite extends WordSpec with ShouldMatchers {
 
       def testWithIterations(iterations: Int) = {
         (the [Exception] thrownBy {
-          Skiis(1 to iterations).parMap(i => f(i))(context).toIterator.to[Vector]
+          Skiis(1 to iterations).parMap(i => f(i))(context).toIterator.to(Vector)
         }).getMessage shouldBe "foo"
       }
 

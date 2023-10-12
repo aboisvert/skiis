@@ -1,13 +1,13 @@
 package skiis2
 
 import java.util.concurrent.Executors
-import org.scalatest.WordSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.matchers.should.Matchers
 import scala.collection._
 import java.util.concurrent.atomic.AtomicInteger
 
-@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
-class ParForeachSuite extends WordSpec with ShouldMatchers {
+//@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
+class ParForeachSuite extends AnyWordSpec with Matchers {
   import Skiis._
 
   val r = new scala.util.Random
@@ -42,7 +42,7 @@ class ParForeachSuite extends WordSpec with ShouldMatchers {
             val acc = new java.util.concurrent.atomic.AtomicInteger()
             Skiis(1 to n).parForeach { i => acc.incrementAndGet(); Thread.sleep(r.nextInt(10)) }(small)
             if (j % 10 == 1) print(".")
-            acc.get should be === n
+            acc.get should === (n)
           }
 
           println()

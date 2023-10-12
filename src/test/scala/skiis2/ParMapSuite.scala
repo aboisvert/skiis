@@ -1,13 +1,13 @@
 package skiis2
 
 import java.util.concurrent.Executors
-import org.scalatest.WordSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.matchers.should.Matchers
 import scala.collection._
 import java.util.concurrent.atomic.AtomicInteger
 
-@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
-class ParMapSuite extends WordSpec with ShouldMatchers {
+//@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
+class ParMapSuite extends AnyWordSpec with Matchers {
   import Skiis._
 
   val r = new scala.util.Random
@@ -42,16 +42,16 @@ class ParMapSuite extends WordSpec with ShouldMatchers {
         }(context)
 
         skiis foreach { case (x1, x2, x3) =>
-          x2 should be === (x1 + 1)
-          x3 should be === (x1)
+          x2 should === ((x1 + 1))
+          x3 should === ((x1))
           acc3.incrementAndGet()
           acc4.addAndGet(x1)
         }
 
-        acc1.get should be === 40
-        acc2.get should be === 1000
-        acc3.get should be === 1000
-        acc4.get should be === (1 to 1000).sum
+        acc1.get should === (40)
+        acc2.get should === (1000)
+        acc3.get should === (1000)
+        acc4.get should === ((1 to 1000).sum)
       }
 
       ("parFlatMap %d" format i) in {
@@ -60,7 +60,7 @@ class ParMapSuite extends WordSpec with ShouldMatchers {
           val len = i % 100
           Skiis(1 to len)
         }(context)
-        skiis.force().sum should be === 1666500
+        skiis.force().sum should === (1666500)
       }
     }
   }

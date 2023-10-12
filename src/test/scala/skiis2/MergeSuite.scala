@@ -2,13 +2,14 @@ package skiis2
 
 import java.util.concurrent.Executors
 
-import org.scalatest.WordSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.collection._
+import scala.language.postfixOps
 
-@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
-class MergeSuite extends WordSpec with ShouldMatchers {
+// @org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
+class MergeSuite extends AnyWordSpec with Matchers {
   import Skiis._
 
   val r = new scala.util.Random
@@ -40,7 +41,7 @@ class MergeSuite extends WordSpec with ShouldMatchers {
           n.incrementAndGet()
         }(context)
 
-        actualTotal.get should be === expectedTotal
+        actualTotal.get should === (expectedTotal)
         println("total adds: " + n.get)
       }
     }

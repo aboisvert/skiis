@@ -6,10 +6,13 @@ import java.util.concurrent.locks._
 
 import scala.annotation.tailrec
 import scala.annotation.unchecked.uncheckedVariance
+import scala.collection.Seq
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.generic.CanBuildFrom
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
+import scala.util.Failure
+import scala.collection.Factory
 
 /** "Parallel Skiis"
  *
@@ -310,8 +313,9 @@ trait Skiis[+T] extends { self =>
     Skiis.async {
       this foreach { queue += _ }
       queue.close()
-    }.onFailure({ case t: Throwable =>
-      queue.reportException(t)
+    }.onComplete({
+      case Failure(t) => queue.reportException(t)
+      case _ =>
     })(ExecutionContext.Implicits.global)
     queue
   }
@@ -331,10 +335,11 @@ trait Skiis[+T] extends { self =>
   }
 
   /** Force evaluation of the collection and convert this Skiis to a collection of type `Col` */
-  def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, T, Col[T @uncheckedVariance]]): Col[T @uncheckedVariance] = toIterator.to[Col]
+  def to[C1](factory: Factory[T, C1]): C1 = factory.fromSpecific(toIterator)
+
 
   /** Force evaluation of the collection and return all elements in a strict (non-lazy) Seq. */
-  def force(): Seq[T] = to[Vector]
+  def force(): Seq[T] = to(Vector)
 
   def parForce(context: Context): Seq[T] = {
     parPull(context).force()
@@ -578,8 +583,9 @@ trait Skiis[+T] extends { self =>
         }
       }
       for (q <- qq) q.close()
-    }.onFailure({ case t: Throwable =>
-      for (q <- qq) q.reportException(t)
+    }.onComplete({
+      case Failure(t) => for (q <- qq) q.reportException(t)
+      case _ =>
     })(ExecutionContext.Implicits.global)
     qq
   }
@@ -765,7 +771,7 @@ trait Skiis[+T] extends { self =>
       (workersOutstanding <= context.parallelism && results.size + (workersOutstanding * context.batch) < context.queue)
     }
 
-    override def next: Option[U] = next(-1L, TimeUnit.MILLISECONDS)
+    override def next(): Option[U] = next(-1L, TimeUnit.MILLISECONDS)
 
     /** Waits if necessary for at most the given time for the computation to complete,
      *  and then retrieves its result, if available.
@@ -1054,7 +1060,7 @@ object Skiis {
 
   /** Construct Skiis[T] collection from an Iterator[T] */
   def apply[T](iter: Iterator[T]) = new Skiis[T] {
-    override def next = iter.synchronized {
+    override def next() = iter.synchronized {
       if (iter.hasNext) Some(iter.next) else None
     }
     override def take(n: Int) = iter.synchronized { super.take(n) }
@@ -1379,7 +1385,10 @@ object Skiis {
       val oldConsumer = consumer
       queue = new Skiis.Queue[T](queueSize)
       consumer = Skiis.async(name) { f(queue) }
-      consumer.onFailure({ case t: Throwable => queue.reportException(t) })(ExecutionContext.Implicits.global)
+      consumer.onComplete({
+        case Failure(t) => queue.reportException(t)
+        case _ =>
+      })(ExecutionContext.Implicits.global)
       (oldQueue, oldConsumer)
     }
 

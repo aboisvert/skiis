@@ -1,13 +1,13 @@
 package skiis2
 
 import java.util.concurrent.Executors
-import org.scalatest.WordSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.matchers.should.Matchers
 import scala.collection._
 import java.util.concurrent.atomic.AtomicInteger
 
-@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
-class ParFlatMapSuite extends WordSpec with ShouldMatchers {
+//@org.junit.runner.RunWith(classOf[org.scalatest.junit.JUnitRunner])
+class ParFlatMapSuite extends AnyWordSpec with Matchers {
   import Skiis._
 
   val r = new scala.util.Random // thread-safe
