@@ -8,5 +8,4 @@ lib/
 .metals
 .bsp/sbt.json
 project/metals.sbt
-.gitignore
 project/project/metals.sbt
